@@ -20,9 +20,9 @@ services:
         value: "https://grafo-gomez-web.onrender.com"
     healthCheckPath: /health
 
-  # ===== FRONTEND (React Static Site) =====
-  - type: static
-    name: grafo-gomez-web
+# ===== FRONTEND (React Static Site) =====
+staticSites:
+  - name: grafo-gomez-web
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
