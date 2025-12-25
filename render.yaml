@@ -22,7 +22,7 @@ services:
     plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
-    startCommand: npx serve dist -l $PORT
+    startCommand: npm start
     envVars:
       - key: VITE_API_URL
         value: https://grafo-gomez-api.onrender.com
