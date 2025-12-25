@@ -21,10 +21,8 @@ services:
     healthCheckPath: /health
 
   # ===== FRONTEND (React Static Site) =====
-  - type: web
+  - type: static_site
     name: grafo-gomez-web
-    runtime: static
-    plan: free
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
