@@ -2,6 +2,8 @@
 
 Aplicación web para análisis de redes de citaciones académicas, construida con **FastAPI** (backend) y **React + vis.js** (frontend).
 
+**Demo en vivo:** https://web-app-gomez-2.onrender.com
+
 ## 🚀 Características
 
 - 🔍 **Búsqueda de artículos** en múltiples motores académicos (Semantic Scholar, CrossRef, OpenAlex, etc.)
@@ -32,8 +34,119 @@ web-app-gomez/
 │   │   └── App.tsx             # Aplicación principal
 │   └── package.json
 │
-└── render.yaml                 # Config Render.com
+└── render.yaml                 # Config Render.com (Blueprint)
 ```
+
+---
+
+## 🌐 Despliegue en Render.com
+
+### Paso 1: Subir a GitHub
+
+```bash
+git init
+git add -A
+git commit -m "Initial commit"
+git remote add origin https://github.com/TU_USUARIO/web-app-gomez.git
+git push -u origin main
+```
+
+### Paso 2: Crear el Backend (Web Service)
+
+1. Ve a [Render.com](https://dashboard.render.com) → **New +** → **Web Service**
+2. Conecta tu repositorio de GitHub
+3. Configura:
+
+| Campo | Valor |
+|-------|-------|
+| **Name** | `grafo-gomez-api` |
+| **Root Directory** | `backend` |
+| **Runtime** | `Python 3` |
+| **Build Command** | `pip install -r requirements.txt` |
+| **Start Command** | `uvicorn app.main:app --host 0.0.0.0 --port $PORT` |
+| **Instance Type** | `Free` |
+
+4. Agrega las **Variables de Entorno** (ver sección abajo)
+5. Click en **Create Web Service**
+
+### Paso 3: Crear el Frontend (Web Service)
+
+1. **New +** → **Web Service**
+2. Conecta el mismo repositorio
+3. Configura:
+
+| Campo | Valor |
+|-------|-------|
+| **Name** | `grafo-gomez-web` |
+| **Root Directory** | `frontend` |
+| **Runtime** | `Node` |
+| **Build Command** | `npm install && npm run build` |
+| **Start Command** | `npm start` |
+| **Instance Type** | `Free` |
+
+4. Agrega las **Variables de Entorno** (ver sección abajo)
+5. Click en **Create Web Service**
+
+---
+
+## 🔧 Variables de Entorno
+
+### Backend (`grafo-gomez-api`)
+
+| Variable | Valor | Descripción |
+|----------|-------|-------------|
+| `CORS_ORIGINS` | `https://TU-FRONTEND.onrender.com` | **IMPORTANTE:** URL exacta del frontend |
+| `PYTHON_VERSION` | `3.11.0` | Versión de Python |
+| `DEBUG` | `false` | Modo debug (false en producción) |
+
+**⚠️ IMPORTANTE sobre CORS:**
+- El valor de `CORS_ORIGINS` debe ser la URL exacta de tu frontend
+- Sin barra `/` al final
+- Ejemplo: `https://grafo-gomez-web.onrender.com`
+- Si tu frontend tiene otro nombre (ej: `web-app-gomez-2`), usa esa URL
+
+### Frontend (`grafo-gomez-web`)
+
+| Variable | Valor | Descripción |
+|----------|-------|-------------|
+| `VITE_API_URL` | `https://TU-BACKEND.onrender.com` | URL del backend |
+
+**Ejemplo:**
+- Si tu backend es `grafo-gomez-api.onrender.com`
+- Entonces: `VITE_API_URL` = `https://grafo-gomez-api.onrender.com`
+
+---
+
+## ⚠️ Solución de Problemas Comunes
+
+### Error: "Network Error" o "CORS blocked"
+
+**Causa:** La variable `CORS_ORIGINS` del backend no coincide con el dominio del frontend.
+
+**Solución:**
+1. Ve al backend en Render → **Environment**
+2. Verifica que `CORS_ORIGINS` tenga la URL exacta del frontend
+3. Guarda y espera el redeploy
+
+### El frontend muestra JSON en lugar de la app
+
+**Causa:** Estás accediendo al backend, no al frontend.
+
+**Solución:** Usa la URL del frontend, no del backend.
+
+### Los cambios no se reflejan
+
+**Solución:** 
+1. Ve al servicio en Render
+2. Click en **Manual Deploy** → **Clear build cache & deploy**
+
+### El servicio se "duerme" (plan gratuito)
+
+**Causa:** Los servicios gratuitos se suspenden tras 15 min de inactividad.
+
+**Solución:** La primera visita tarda ~30 segundos en despertar. Es normal.
+
+---
 
 ## 🛠️ Desarrollo Local
 
@@ -55,13 +168,12 @@ source venv/bin/activate  # Windows: venv\Scripts\activate
 # Instalar dependencias
 pip install -r requirements.txt
 
-# Ejecutar servidor de desarrollo
+# Ejecutar servidor
 uvicorn app.main:app --reload --port 8000
 ```
 
-La API estará disponible en `http://localhost:8000`
-- Documentación Swagger: `http://localhost:8000/docs`
-- Documentación ReDoc: `http://localhost:8000/redoc`
+- API: http://localhost:8000
+- Docs: http://localhost:8000/docs
 
 ### Frontend
 
@@ -71,44 +183,13 @@ cd frontend
 # Instalar dependencias
 npm install
 
-# Ejecutar servidor de desarrollo
+# Ejecutar servidor
 npm run dev
 ```
 
-El frontend estará disponible en `http://localhost:5173`
+- App: http://localhost:5173
 
-## 🌐 Despliegue en Render.com
-
-### Opción 1: Despliegue automático con Blueprint
-
-1. Subir este repositorio a GitHub
-2. Crear cuenta en [Render.com](https://render.com)
-3. Ir a Dashboard → **New** → **Blueprint**
-4. Conectar el repositorio de GitHub
-5. Render detectará el archivo `render.yaml` y creará los servicios automáticamente
-
-### Opción 2: Despliegue manual
-
-#### Backend (Web Service)
-
-1. Crear nuevo "Web Service"
-2. Conectar repositorio
-3. Configurar:
-   - **Root Directory**: `backend`
-   - **Build Command**: `pip install -r requirements.txt`
-   - **Start Command**: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-   - **Environment**: Python 3
-
-#### Frontend (Static Site)
-
-1. Crear nuevo "Static Site"
-2. Conectar repositorio
-3. Configurar:
-   - **Root Directory**: `frontend`
-   - **Build Command**: `npm install && npm run build`
-   - **Publish Directory**: `dist`
-4. Agregar variable de entorno:
-   - `VITE_API_URL`: URL del backend (ej: `https://grafo-gomez-api.onrender.com`)
+---
 
 ## 📡 API Endpoints
 
@@ -116,39 +197,25 @@ El frontend estará disponible en `http://localhost:5173`
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| POST | `/api/v1/buscar/sync` | Búsqueda síncrona (fusiona con grafo existente) |
-| GET | `/api/v1/buscar/progreso/{task_id}` | Estado de búsqueda |
+| `POST` | `/api/v1/buscar/sync` | Búsqueda síncrona (fusiona con grafo existente) |
+| `GET` | `/api/v1/buscar/progreso/{task_id}` | Estado de búsqueda |
 
 ### Grafo
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| GET | `/api/v1/grafo` | Grafo en formato vis.js |
-| DELETE | `/api/v1/grafo` | Limpiar grafo |
-| POST | `/api/v1/grafo/importar` | Importar grafo (JSON/CSV) |
+| `GET` | `/api/v1/grafo` | Grafo en formato vis.js |
+| `DELETE` | `/api/v1/grafo` | Limpiar grafo |
+| `POST` | `/api/v1/grafo/importar` | Importar grafo (JSON/CSV) |
 
 ### Métricas
 
 | Método | Endpoint | Descripción |
 |--------|----------|-------------|
-| GET | `/api/v1/metricas` | Métricas del grafo |
-| GET | `/api/v1/estadisticas` | Estadísticas básicas |
+| `GET` | `/api/v1/metricas` | Métricas del grafo |
+| `GET` | `/api/v1/estadisticas` | Estadísticas básicas |
 
-## 🔧 Variables de Entorno
-
-### Backend
-
-| Variable | Descripción | Ejemplo |
-|----------|-------------|---------|
-| `PORT` | Puerto del servidor | `8000` |
-| `DEBUG` | Modo debug | `false` |
-| `CORS_ORIGINS` | Orígenes permitidos | `https://grafo-gomez-web.onrender.com` |
-
-### Frontend
-
-| Variable | Descripción | Ejemplo |
-|----------|-------------|---------|
-| `VITE_API_URL` | URL del backend | `https://grafo-gomez-api.onrender.com` |
+---
 
 ## 📚 Tecnologías
 
@@ -165,6 +232,16 @@ El frontend estará disponible en `http://localhost:5173`
 - [Tailwind CSS](https://tailwindcss.com/) - Styling
 - [Vite](https://vitejs.dev/) - Build tool
 
+---
+
 ## 📄 Licencia
 
 MIT - Libre para uso comercial y personal.
+
+---
+
+## 🎄 Historial de Versiones
+
+- **navidad03** (25 dic 2025) - Deploy en Render.com completado, fix CORS y autores
+- **navidad02** (25 dic 2025) - Búsqueda fusiona grafos en lugar de reemplazar
+- **navidad01** (25 dic 2025) - Inicio del trabajo
