@@ -102,19 +102,6 @@ function Dashboard() {
   }, []);
 
   // Handlers de métricas
-  const handleCalculateDensidad = useCallback(async () => {
-    if (!hasData) return;
-    setIsCalculating(true);
-    try {
-      const stats = await obtenerEstadisticas();
-      alert(`Densidad del grafo: ${(stats.densidad * 100).toFixed(4)}%`);
-    } catch (error) {
-      console.error("Error:", error);
-    } finally {
-      setIsCalculating(false);
-    }
-  }, [hasData]);
-
   const handleCalculateCentralidad = useCallback(async () => {
     if (!hasData) return;
     setIsCalculating(true);
@@ -538,7 +525,6 @@ function Dashboard() {
             {/* Toolbar */}
             <Toolbar
               hasData={hasData}
-              onCalculateDensidad={handleCalculateDensidad}
               onCalculateCentralidad={handleCalculateCentralidad}
               onCalculatePageRank={handleCalculatePageRank}
               onCalculateBetweenness={handleCalculateBetweenness}

@@ -2,9 +2,7 @@
 // Barra de herramientas con métricas y acciones - Diseño mejorado
 
 import {
-  Calculator,
   BarChart3,
-  Palette,
   Eye,
   EyeOff,
   Undo2,
@@ -19,7 +17,6 @@ import {
 
 interface ToolbarProps {
   hasData: boolean;
-  onCalculateDensidad: () => void;
   onCalculateCentralidad: () => void;
   onCalculatePageRank: () => void;
   onCalculateBetweenness: () => void;
@@ -37,7 +34,6 @@ interface ToolbarProps {
 
 export default function Toolbar({
   hasData,
-  onCalculateDensidad,
   onCalculateCentralidad,
   onCalculatePageRank,
   onCalculateBetweenness,
@@ -60,15 +56,6 @@ export default function Toolbar({
             Calcular
           </span>
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={onCalculateDensidad}
-              disabled={!hasData || isCalculating}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-700/60 hover:bg-slate-600/60 text-slate-200 border border-slate-600/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Calcular densidad del grafo"
-            >
-              <Calculator className="w-4 h-4" />
-              <span className="text-sm font-medium">Densidad</span>
-            </button>
             <button
               onClick={onCalculateCentralidad}
               disabled={!hasData || isCalculating}
