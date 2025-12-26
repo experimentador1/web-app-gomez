@@ -972,3 +972,260 @@ class Grafo:
         print(f"[merge_from_visjs] Autores encontrados: {list(autor_articulos.keys())[:5]}...")
         return stats
 
+    # ==================== CLASIFICACIÓN CITAS A/B ====================
+    
+    def _autores_a_set(self, autores: Any) -> Set[str]:
+        """
+        Convierte una lista de autores a un set normalizado de strings en minúsculas.
+        Maneja diferentes formatos: string, lista de strings, lista de dicts con 'name'.
+        """
+        import re
+        resultado = set()
+        
+        if not autores or autores == "No disponible":
+            return resultado
+        
+        if isinstance(autores, str):
+            # Dividir por coma, punto y coma, pipe, " y " o " and "
+            for part in re.split(r"\s*(?:,|;|\|| y | and )\s*", autores):
+                part = part.strip().lower()
+                if part:
+                    resultado.add(part)
+            return resultado
+        
+        if isinstance(autores, dict):
+            # Un solo autor como dict
+            name = autores.get("name") or autores.get("author") or autores.get("fullName") or autores.get("display_name")
+            if name:
+                resultado.add(str(name).strip().lower())
+            return resultado
+        
+        if isinstance(autores, list):
+            for autor in autores:
+                if isinstance(autor, str):
+                    resultado.add(autor.strip().lower())
+                elif isinstance(autor, dict):
+                    name = autor.get("name") or autor.get("author") or autor.get("fullName") or autor.get("display_name")
+                    if name:
+                        resultado.add(str(name).strip().lower())
+        
+        return resultado
+    
+    def clasificar_citas_ab(self) -> Dict[str, Any]:
+        """
+        Clasifica los artículos del grafo según el algoritmo de Citas A/B.
+        
+        El algoritmo ejecuta tres corridas:
+        1. Azul: Pintar de azul los artículos que tienen autores definidos.
+        2. Amarillo (B): Degradar a amarillo los artículos donde citante y citado
+           comparten al menos un autor (auto-citación).
+        3. Verde (AB): Marcar como verdes las raíces de las cadenas de auto-citación.
+        
+        Tipos resultantes:
+        - A (azul): Artículos con autores, sin coincidencias con citados/citantes
+        - B (amarillo): Artículos con autores en común entre citante y citado
+        - AB (verde): Raíces de cadenas de auto-citación
+        - S (rojo): Artículos sin autores (no clasificados)
+        
+        Returns:
+            Dict con el reporte de la clasificación:
+            - corrida1: stats de la primera corrida (azul)
+            - corrida2: stats de la segunda corrida (amarillo)
+            - corrida3: stats de la tercera corrida (verde)
+            - resumen: conteo final por tipo/color
+        """
+        reporte = {
+            "corrida1": {"total_vertices": 0, "pintados_azul": 0, "omitidos_sin_autores": 0},
+            "corrida2": {"aristas_evaluadas": 0, "pares_B": 0, "vertices_amarillo": 0, "muestras": []},
+            "corrida3": {"raices_ab": 0, "vertices_verde": 0},
+            "resumen": {"tipo_A": 0, "tipo_B": 0, "tipo_AB": 0, "tipo_S": 0, "total": 0}
+        }
+        
+        if not self.vertices:
+            return reporte
+        
+        # Corrida 1: Pintar de azul o rojo según tengan autores
+        reporte["corrida1"] = self._corrida1_pintar_azul()
+        
+        # Corrida 2: Degradar a B (amarillo) por autores en común
+        reporte["corrida2"] = self._corrida2_degradar_a_b()
+        
+        # Corrida 3: Marcar raíces de cadenas como AB (verde)
+        reporte["corrida3"] = self._corrida3_marcar_ab()
+        
+        # Calcular resumen final
+        reporte["resumen"] = self._calcular_resumen_ab()
+        
+        return reporte
+    
+    def _corrida1_pintar_azul(self) -> Dict[str, Any]:
+        """
+        Corrida 1: Pintar de azul los artículos con autores, rojo los sin autores.
+        """
+        stats = {
+            "total_vertices": len(self.vertices),
+            "pintados_azul": 0,
+            "omitidos_sin_autores": 0
+        }
+        
+        for vertice_id, vertice in self.vertices.items():
+            # Solo procesar artículos (capa 0)
+            if vertice.capa != 0:
+                continue
+            
+            autores = vertice.informacion.authors
+            tiene_autores = bool(self._autores_a_set(autores))
+            
+            if tiene_autores:
+                vertice.color = "blue"
+                vertice.tipo_cita = "A"
+                stats["pintados_azul"] += 1
+            else:
+                vertice.color = "red"
+                vertice.tipo_cita = "S"
+                stats["omitidos_sin_autores"] += 1
+        
+        return stats
+    
+    def _corrida2_degradar_a_b(self) -> Dict[str, Any]:
+        """
+        Corrida 2: Degradar a B (amarillo) los artículos con autores en común.
+        Una arista (citante -> citado) es tipo B si comparten al menos un autor.
+        """
+        stats = {
+            "aristas_evaluadas": 0,
+            "pares_B": 0,
+            "vertices_amarillo": 0,
+            "muestras": []
+        }
+        
+        # Cache de autores por vértice
+        autores_map = {}
+        for vertice_id, vertice in self.vertices.items():
+            autores_map[vertice_id] = self._autores_a_set(vertice.informacion.authors)
+        
+        vertices_pintados = set()
+        
+        # Recorrer todas las aristas
+        for origen_id, vertice in self.vertices.items():
+            # Solo procesar artículos (capa 0)
+            if vertice.capa != 0:
+                continue
+            
+            # Solo evaluar si el origen tiene autores
+            autores_origen = autores_map.get(origen_id, set())
+            if not autores_origen:
+                continue
+            
+            for destino_id in vertice.adyacencias.keys():
+                # Solo procesar si destino es artículo
+                destino_vertice = self.vertices.get(destino_id)
+                if not destino_vertice or destino_vertice.capa != 0:
+                    continue
+                
+                autores_destino = autores_map.get(destino_id, set())
+                if not autores_destino:
+                    continue
+                
+                stats["aristas_evaluadas"] += 1
+                
+                # Verificar intersección de autores
+                if autores_origen & autores_destino:
+                    # Marcar ambos vértices como B (amarillo)
+                    for vid in (origen_id, destino_id):
+                        v = self.vertices.get(vid)
+                        if v and v.tipo_cita != "B":
+                            v.color = "yellow"
+                            v.tipo_cita = "B"
+                            vertices_pintados.add(vid)
+                    
+                    stats["pares_B"] += 1
+                    
+                    # Guardar muestras (máximo 12)
+                    if len(stats["muestras"]) < 12:
+                        stats["muestras"].append({
+                            "origen": origen_id[:50],
+                            "destino": destino_id[:50]
+                        })
+        
+        stats["vertices_amarillo"] = len(vertices_pintados)
+        return stats
+    
+    def _corrida3_marcar_ab(self) -> Dict[str, Any]:
+        """
+        Corrida 3: Dentro del subgrafo de vértices B (amarillos), 
+        identificar como AB (verde) los vértices que NO tienen salidas hacia otros B.
+        Estos son las raíces de las cadenas de auto-citación.
+        """
+        stats = {
+            "raices_ab": 0,
+            "vertices_verde": 0
+        }
+        
+        # Recolectar vértices B (amarillos)
+        amarillos = set()
+        for vertice_id, vertice in self.vertices.items():
+            if vertice.tipo_cita == "B" or (vertice.color and vertice.color.lower() == "yellow"):
+                amarillos.add(vertice_id)
+        
+        if not amarillos:
+            return stats
+        
+        # Calcular out-degree dentro del subgrafo amarillo
+        outdeg_amarillo = {n: 0 for n in amarillos}
+        
+        for vertice_id in amarillos:
+            vertice = self.vertices.get(vertice_id)
+            if not vertice:
+                continue
+            
+            for destino_id in vertice.adyacencias.keys():
+                if destino_id in amarillos:
+                    outdeg_amarillo[vertice_id] += 1
+        
+        # Raíces = vértices B sin salidas a otros B
+        raices = [vid for vid, deg in outdeg_amarillo.items() if deg == 0]
+        
+        # Marcar como AB (verde)
+        for vid in raices:
+            vertice = self.vertices.get(vid)
+            if vertice:
+                vertice.color = "green"
+                vertice.tipo_cita = "AB"
+                stats["vertices_verde"] += 1
+        
+        stats["raices_ab"] = len(raices)
+        return stats
+    
+    def _calcular_resumen_ab(self) -> Dict[str, int]:
+        """Calcula el resumen final de la clasificación A/B."""
+        resumen = {
+            "tipo_A": 0,   # Azul: sin coincidencias
+            "tipo_B": 0,   # Amarillo: con coincidencias
+            "tipo_AB": 0,  # Verde: raíces de cadenas
+            "tipo_S": 0,   # Rojo: sin autores
+            "total": 0
+        }
+        
+        for vertice in self.vertices.values():
+            # Solo contar artículos (capa 0)
+            if vertice.capa != 0:
+                continue
+            
+            resumen["total"] += 1
+            color = (vertice.color or "").lower()
+            tipo = vertice.tipo_cita
+            
+            if tipo == "AB" or color == "green":
+                resumen["tipo_AB"] += 1
+            elif tipo == "B" or color == "yellow":
+                resumen["tipo_B"] += 1
+            elif tipo == "A" or color == "blue":
+                resumen["tipo_A"] += 1
+            elif tipo == "S" or color == "red":
+                resumen["tipo_S"] += 1
+            else:
+                resumen["tipo_S"] += 1  # No clasificado
+        
+        return resumen
+

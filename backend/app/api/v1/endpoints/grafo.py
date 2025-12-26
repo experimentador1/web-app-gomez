@@ -372,6 +372,78 @@ async def obtener_estadisticas():
     }
 
 
+# ==================== CITAS A/B ====================
+
+@router.post("/citas-ab")
+async def clasificar_citas_ab():
+    """
+    Ejecuta el algoritmo de clasificación de Citas A/B.
+    
+    El algoritmo clasifica los artículos según coincidencias de autores entre citantes y citados:
+    
+    - **Tipo A (azul)**: Artículos con autores, sin coincidencias con sus citados/citantes.
+    - **Tipo B (amarillo)**: Artículos donde citante y citado comparten al menos un autor.
+    - **Tipo AB (verde)**: Raíces de cadenas de auto-citación (tipo B sin salidas hacia otros B).
+    - **Tipo S (rojo)**: Artículos sin información de autores (no clasificados).
+    
+    Returns:
+        Dict con el reporte de clasificación incluyendo estadísticas de cada corrida.
+    """
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado. Realiza primero una búsqueda.")
+    
+    try:
+        # Ejecutar clasificación
+        reporte = grafo_service.grafo_actual.clasificar_citas_ab()
+        
+        # Obtener grafo actualizado con colores
+        grafo_actualizado = grafo_service.exportar_grafo(formato="visjs")
+        
+        return {
+            "mensaje": "Clasificación Citas A/B completada",
+            "reporte": reporte,
+            "grafo": grafo_actualizado
+        }
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Error en clasificación A/B: {str(e)}")
+
+
+@router.get("/citas-ab/info")
+async def info_citas_ab():
+    """
+    Retorna información sobre el algoritmo de Citas A/B.
+    """
+    return {
+        "nombre": "Algoritmo de Citas A/B",
+        "descripcion": "Clasifica artículos según coincidencias de autores entre citantes y citados",
+        "tipos": {
+            "A": {
+                "color": "blue",
+                "descripcion": "Artículos con autores, sin coincidencias con citados/citantes"
+            },
+            "B": {
+                "color": "yellow", 
+                "descripcion": "Artículos donde citante y citado comparten al menos un autor"
+            },
+            "AB": {
+                "color": "green",
+                "descripcion": "Raíces de cadenas de auto-citación"
+            },
+            "S": {
+                "color": "red",
+                "descripcion": "Artículos sin información de autores"
+            }
+        },
+        "corridas": [
+            "Corrida 1: Pintar azul los artículos con autores, rojo los sin autores",
+            "Corrida 2: Degradar a amarillo los artículos con autores en común",
+            "Corrida 3: Marcar verde las raíces de cadenas de auto-citación"
+        ]
+    }
+
+
 # ==================== VÉRTICES ====================
 
 @router.get("/vertice/{vertice_id}")

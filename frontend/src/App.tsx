@@ -16,6 +16,7 @@ import StatsPanel from "./components/StatsPanel";
 import Toolbar from "./components/Toolbar";
 import ColorPanel from "./components/ColorPanel";
 import StatsModal from "./components/StatsModal";
+import CitasABModal from "./components/CitasABModal";
 
 import {
   buscarSincrono,
@@ -24,6 +25,8 @@ import {
   obtenerEstadisticas,
   importarGrafo,
   obtenerGrafo,
+  clasificarCitasAB,
+  CitasABResponse,
 } from "./services/api";
 import type { BusquedaRequest, VisJSData, MetricasResponse } from "./types/grafo";
 
@@ -48,6 +51,8 @@ function Dashboard() {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [metricas, setMetricas] = useState<MetricasResponse | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [showCitasABModal, setShowCitasABModal] = useState(false);
+  const [citasABReporte, setCitasABReporte] = useState<CitasABResponse["reporte"] | null>(null);
 
   const hasData = grafoData.nodes.length > 0;
 
@@ -161,6 +166,26 @@ function Dashboard() {
       alert("Closeness calculado. Ver panel de estadísticas.");
     } catch (error) {
       console.error("Error:", error);
+    } finally {
+      setIsCalculating(false);
+    }
+  }, [hasData]);
+
+  const handleCitasAB = useCallback(async () => {
+    if (!hasData) return;
+    setIsCalculating(true);
+    try {
+      const response = await clasificarCitasAB();
+      // Actualizar el grafo con los nuevos colores
+      setGrafoData(response.grafo);
+      // Mostrar el reporte
+      setCitasABReporte(response.reporte);
+      setShowCitasABModal(true);
+    } catch (error) {
+      console.error("Error en Citas A/B:", error);
+      setSearchError(
+        error instanceof Error ? error.message : "Error al clasificar Citas A/B"
+      );
     } finally {
       setIsCalculating(false);
     }
@@ -518,6 +543,7 @@ function Dashboard() {
               onCalculatePageRank={handleCalculatePageRank}
               onCalculateBetweenness={handleCalculateBetweenness}
               onCalculateCloseness={handleCalculateCloseness}
+              onCitasAB={handleCitasAB}
               onShowStats={handleShowStats}
               onToggleLabels={handleToggleLabels}
               onApplyColors={() => {}}
@@ -583,6 +609,12 @@ function Dashboard() {
         metricas={metricas}
         numVertices={grafoData.nodes.length}
         numAristas={grafoData.edges.length}
+      />
+
+      <CitasABModal
+        isOpen={showCitasABModal}
+        onClose={() => setShowCitasABModal(false)}
+        reporte={citasABReporte}
       />
     </div>
   );

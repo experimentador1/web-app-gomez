@@ -172,6 +172,62 @@ export async function obtenerEstadisticas(): Promise<EstadisticasResponse> {
   return data;
 }
 
+// ==================== CITAS A/B ====================
+
+/**
+ * Respuesta de clasificación Citas A/B.
+ */
+export interface CitasABResponse {
+  mensaje: string;
+  reporte: {
+    corrida1: {
+      total_vertices: number;
+      pintados_azul: number;
+      omitidos_sin_autores: number;
+    };
+    corrida2: {
+      aristas_evaluadas: number;
+      pares_B: number;
+      vertices_amarillo: number;
+      muestras: Array<{ origen: string; destino: string }>;
+    };
+    corrida3: {
+      raices_ab: number;
+      vertices_verde: number;
+    };
+    resumen: {
+      tipo_A: number;
+      tipo_B: number;
+      tipo_AB: number;
+      tipo_S: number;
+      total: number;
+    };
+  };
+  grafo: VisJSData;
+}
+
+/**
+ * Ejecuta el algoritmo de clasificación Citas A/B.
+ * Clasifica los artículos según coincidencias de autores.
+ */
+export async function clasificarCitasAB(): Promise<CitasABResponse> {
+  const { data } = await api.post<CitasABResponse>("/citas-ab");
+  return data;
+}
+
+/**
+ * Obtiene información sobre el algoritmo Citas A/B.
+ */
+export async function obtenerInfoCitasAB(): Promise<{
+  nombre: string;
+  descripcion: string;
+  tipos: Record<string, { color: string; descripcion: string }>;
+  corridas: string[];
+}> {
+  const { data } = await api.get("/citas-ab/info");
+  return data;
+}
+
 // ==================== VÉRTICES ====================
 
 /**
