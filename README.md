@@ -10,6 +10,7 @@ Aplicación web para análisis de redes de citaciones académicas, construida co
 - 📊 **Grafos interactivos** de citas y referencias con vis.js
 - 📈 **Métricas de centralidad**: PageRank, Betweenness, Closeness
 - 🔄 **Fusión de grafos**: las búsquedas se acumulan en el grafo existente
+- 🧬 **Clasificación Citas A/B**: detección de auto-citación por coincidencia de autores
 - 🎨 **Interfaz moderna** con Tailwind CSS y modo oscuro
 - 🚀 **Listo para Render.com**
 
@@ -215,6 +216,13 @@ npm run dev
 | `GET` | `/api/v1/metricas` | Métricas del grafo |
 | `GET` | `/api/v1/estadisticas` | Estadísticas básicas |
 
+### Citas A/B
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `POST` | `/api/v1/citas-ab` | Clasificar artículos por coincidencia de autores |
+| `GET` | `/api/v1/citas-ab/info` | Información del algoritmo |
+
 ---
 
 ## 📚 Tecnologías
@@ -234,6 +242,49 @@ npm run dev
 
 ---
 
+## 🧬 Módulo Citas A/B
+
+El módulo **Citas A/B** permite clasificar los artículos de un grafo según la coincidencia de autores entre citantes y citados. Es útil para identificar patrones de **auto-citación** en redes de citaciones académicas.
+
+### ¿Cómo funciona?
+
+El algoritmo ejecuta **3 corridas** sobre el grafo:
+
+1. **Corrida 1 (Clasificación inicial):** Identifica artículos con y sin información de autores
+2. **Corrida 2 (Detección de auto-citación):** Encuentra pares citante-citado que comparten al menos un autor
+3. **Corrida 3 (Raíces de cadenas):** Marca las raíces de las cadenas de auto-citación
+
+### Tipos de clasificación
+
+| Tipo | Color | Descripción |
+|------|-------|-------------|
+| **A** | 🔵 Azul | Citas independientes - artículos con autores pero sin coincidencias con sus citados/citantes |
+| **B** | 🟡 Amarillo | Auto-citación - artículos donde citante y citado comparten al menos un autor |
+| **AB** | 🟢 Verde | Raíces de cadenas - vértices tipo B que son origen de cadenas de auto-citación |
+| **S** | 🔴 Rojo | Sin clasificar - artículos sin información de autores disponible |
+
+### Uso
+
+1. Construye un grafo buscando artículos (botón "Buscar")
+2. Haz clic en el botón **"Citas A/B"** (color ámbar) en la barra de herramientas
+3. Los nodos del grafo se colorearán según su clasificación
+4. Se mostrará un modal con el **reporte detallado** de la clasificación
+
+### Interpretación de resultados
+
+- **Alto % de tipo B (amarillo):** La red tiene mucha auto-citación
+- **Vértices verdes (AB):** Son los artículos "raíz" que inician cadenas de auto-citación
+- **Vértices rojos (S):** Artículos sin datos de autor (considerar mejorar los datos)
+
+### API Endpoint
+
+| Método | Endpoint | Descripción |
+|--------|----------|-------------|
+| `POST` | `/api/v1/citas-ab` | Ejecuta clasificación A/B y retorna grafo actualizado con reporte |
+| `GET` | `/api/v1/citas-ab/info` | Información sobre el algoritmo |
+
+---
+
 ## 📄 Licencia
 
 MIT - Libre para uso comercial y personal.
@@ -242,6 +293,7 @@ MIT - Libre para uso comercial y personal.
 
 ## 🎄 Historial de Versiones
 
+- **navidad04** (25 dic 2025) - Módulo Citas A/B: clasificación por coincidencia de autores
 - **navidad03** (25 dic 2025) - Deploy en Render.com completado, fix CORS y autores
 - **navidad02** (25 dic 2025) - Búsqueda fusiona grafos en lugar de reemplazar
 - **navidad01** (25 dic 2025) - Inicio del trabajo
