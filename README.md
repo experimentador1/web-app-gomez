@@ -288,12 +288,3 @@ El algoritmo ejecuta **3 corridas** sobre el grafo:
 ## 📄 Licencia
 
 MIT - Libre para uso comercial y personal.
-
----
-
-## 🎄 Historial de Versiones
-
-- **navidad04** (25 dic 2025) - Módulo Citas A/B: clasificación por coincidencia de autores
-- **navidad03** (25 dic 2025) - Deploy en Render.com completado, fix CORS y autores
-- **navidad02** (25 dic 2025) - Búsqueda fusiona grafos en lugar de reemplazar
-- **navidad01** (25 dic 2025) - Inicio del trabajo
