@@ -69,11 +69,18 @@ export default function NodeDetailPanel({
             </div>
 
             {/* Autores */}
-            {data.informacion.authors.length > 0 && (
+            {data.informacion.authors && data.informacion.authors.length > 0 && (
               <div className="flex items-start gap-2">
                 <Users className="w-4 h-4 text-slate-500 mt-1 flex-shrink-0" />
                 <p className="text-sm text-slate-400">
-                  {data.informacion.authors.join(", ")}
+                  {data.informacion.authors.map((author: unknown) => {
+                    if (typeof author === 'string') return author;
+                    if (typeof author === 'object' && author !== null) {
+                      const a = author as { name?: string; nombre?: string };
+                      return a.name || a.nombre || 'Desconocido';
+                    }
+                    return 'Desconocido';
+                  }).join(", ")}
                 </p>
               </div>
             )}
