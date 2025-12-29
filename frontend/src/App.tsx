@@ -5,7 +5,6 @@ import { useState, useCallback } from "react";
 import {
   QueryClient,
   QueryClientProvider,
-  useQuery,
 } from "@tanstack/react-query";
 import { BookOpen, Download, Save, FolderOpen, RefreshCw } from "lucide-react";
 
@@ -24,10 +23,8 @@ import {
   obtenerEstadisticas,
   importarGrafo,
   obtenerGrafo,
-  clasificarCitasAB,
   ocultarDependientes,
   mostrarTodosVertices,
-  CitasABResponse,
 } from "./services/api";
 import type { BusquedaRequest, VisJSData, MetricasResponse } from "./types/grafo";
 

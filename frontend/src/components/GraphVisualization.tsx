@@ -183,17 +183,7 @@ export default function GraphVisualization({
     }
   }, []);
 
-  const focusNode = useCallback((nodeId: string) => {
-    if (networkRef.current) {
-      networkRef.current.focus(nodeId, {
-        scale: 1.5,
-        animation: {
-          duration: 500,
-          easingFunction: "easeInOutQuad",
-        },
-      });
-    }
-  }, []);
+  // focusNode method removed - not currently used
 
   return (
     <div className={`relative ${className}`}>
