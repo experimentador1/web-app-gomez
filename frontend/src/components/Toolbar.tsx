@@ -4,6 +4,7 @@
 import {
   Calculator,
   BarChart3,
+  Palette,
   Eye,
   EyeOff,
   Undo2,
@@ -23,6 +24,7 @@ interface ToolbarProps {
   onCalculateBetweenness: () => void;
   onCalculateCloseness: () => void;
   onShowStats: () => void;
+  onCitasAB: () => void;
   onToggleLabels: () => void;
   onApplyColors: () => void;
   onShowAll: () => void;
@@ -40,6 +42,7 @@ export default function Toolbar({
   onCalculateBetweenness,
   onCalculateCloseness,
   onShowStats,
+  onCitasAB,
   onToggleLabels,
   onShowAll,
   onUndo,
@@ -100,6 +103,15 @@ export default function Toolbar({
             >
               <Compass className="w-4 h-4" />
               <span className="text-sm font-medium">Closeness</span>
+            </button>
+            <button
+              onClick={onCitasAB}
+              disabled={!hasData || isCalculating}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 border border-purple-500/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Clasificar Citas A/B"
+            >
+              <Layers className="w-4 h-4" />
+              <span className="text-sm font-medium">Citas A/B</span>
             </button>
           </div>
         </div>

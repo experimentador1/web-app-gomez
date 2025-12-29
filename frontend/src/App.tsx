@@ -5,6 +5,7 @@ import { useState, useCallback } from "react";
 import {
   QueryClient,
   QueryClientProvider,
+  useQuery,
 } from "@tanstack/react-query";
 import { BookOpen, Download, Save, FolderOpen, RefreshCw } from "lucide-react";
 
@@ -15,6 +16,7 @@ import StatsPanel from "./components/StatsPanel";
 import Toolbar from "./components/Toolbar";
 import ColorPanel from "./components/ColorPanel";
 import StatsModal from "./components/StatsModal";
+import CitasABModal from "./components/CitasABModal";
 
 import {
   buscarSincrono,
@@ -23,8 +25,10 @@ import {
   obtenerEstadisticas,
   importarGrafo,
   obtenerGrafo,
+  clasificarCitasAB,
   ocultarDependientes,
   mostrarTodosVertices,
+  CitasABResponse,
 } from "./services/api";
 import type { BusquedaRequest, VisJSData, MetricasResponse } from "./types/grafo";
 
@@ -47,6 +51,8 @@ function Dashboard() {
   const [searchError, setSearchError] = useState<string | null>(null);
   const [showLabels, setShowLabels] = useState(true);
   const [showStatsModal, setShowStatsModal] = useState(false);
+  const [showCitasABModal, setShowCitasABModal] = useState(false);
+  const [citasABReport, setCitasABReport] = useState<CitasABResponse | null>(null);
   const [metricas, setMetricas] = useState<MetricasResponse | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
 
@@ -171,6 +177,24 @@ function Dashboard() {
   const handleShowStats = useCallback(() => {
     if (hasData) {
       setShowStatsModal(true);
+    }
+  }, [hasData]);
+
+  const handleCitasAB = useCallback(async () => {
+    if (!hasData) return;
+    setIsCalculating(true);
+    try {
+      const reporte = await clasificarCitasAB();
+      setCitasABReport(reporte);
+      setShowCitasABModal(true);
+      // Actualizar grafo con colores A/B
+      const grafoActualizado = await obtenerGrafo();
+      setGrafoData(grafoActualizado);
+    } catch (error) {
+      console.error("Error al clasificar Citas A/B:", error);
+      alert("Error al clasificar Citas A/B");
+    } finally {
+      setIsCalculating(false);
     }
   }, [hasData]);
 
@@ -521,6 +545,7 @@ function Dashboard() {
               onCalculateBetweenness={handleCalculateBetweenness}
               onCalculateCloseness={handleCalculateCloseness}
               onShowStats={handleShowStats}
+              onCitasAB={handleCitasAB}
               onToggleLabels={handleToggleLabels}
               onApplyColors={() => {}}
               onShowAll={handleShowAll}
@@ -589,13 +614,10 @@ function Dashboard() {
           selectedNode
             ? async () => {
                 try {
-                  console.log("🔍 Ocultando dependientes de:", selectedNode);
                   const resultado = await ocultarDependientes(selectedNode);
-                  console.log("✅ Resultado:", resultado);
-                  console.log("📊 Grafo actualizado:", resultado.grafo);
                   setGrafoData(resultado.grafo);
                 } catch (error) {
-                  console.error("❌ Error al ocultar dependientes:", error);
+                  console.error("Error al ocultar dependientes:", error);
                 }
               }
             : undefined
@@ -608,6 +630,12 @@ function Dashboard() {
         metricas={metricas}
         numVertices={grafoData.nodes.length}
         numAristas={grafoData.edges.length}
+      />
+
+      <CitasABModal
+        isOpen={showCitasABModal}
+        onClose={() => setShowCitasABModal(false)}
+        reporte={citasABReport}
       />
     </div>
   );
