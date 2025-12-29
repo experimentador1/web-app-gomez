@@ -487,3 +487,55 @@ async def mostrar_todos_vertices():
         "grafo": grafo_actualizado
     }
 
+# ==================== CLASIFICACIÓN CITAS A/B ====================
+
+@router.post("/citas-ab")
+async def clasificar_citas_ab():
+    """
+    Clasifica el grafo usando el algoritmo de Citas A/B.
+    
+    El algoritmo clasifica los vértices en:
+    - A: Vértices que solo tienen citas (no referencias)
+    - B: Vértices que tienen referencias
+    - AB: Vértices raíz con referencias
+    - S: Vértices sin clasificar
+    """
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    
+    # Ejecutar clasificación
+    resultado = grafo_service.grafo_actual.clasificar_citas_ab()
+    
+    # Obtener grafo actualizado con colores
+    grafo_actualizado = grafo_service.exportar_grafo(formato="visjs")
+    
+    return {
+        "mensaje": "Clasificación Citas A/B completada",
+        "total_vertices": resultado["total_vertices"],
+        "clasificados": resultado["clasificados"],
+        "detalles": resultado["detalles"],
+        "grafo": grafo_actualizado
+    }
+
+@router.get("/citas-ab/info")
+async def obtener_info_citas_ab():
+    """
+    Obtiene información sobre el algoritmo de Citas A/B.
+    """
+    return {
+        "nombre": "Clasificación Citas A/B",
+        "descripcion": "Clasifica los vértices del grafo según su patrón de citas y referencias",
+        "categorias": {
+            "A": "Vértices que solo tienen citas (artículos citados)",
+            "B": "Vértices que tienen referencias (citan a otros)",
+            "AB": "Vértices raíz con referencias",
+            "S": "Vértices sin clasificar"
+        },
+        "colores": {
+            "A": "#FF6B6B",
+            "B": "#4ECDC4",
+            "AB": "#FFD93D",
+            "S": "#95A5A6"
+        }
+    }
+
