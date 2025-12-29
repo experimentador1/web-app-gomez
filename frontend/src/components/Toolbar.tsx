@@ -4,7 +4,6 @@
 import {
   Calculator,
   BarChart3,
-  Palette,
   Eye,
   EyeOff,
   Undo2,
