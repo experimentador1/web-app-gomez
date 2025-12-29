@@ -2,7 +2,9 @@
 // Barra de herramientas con métricas y acciones - Diseño mejorado
 
 import {
+  Calculator,
   BarChart3,
+  Palette,
   Eye,
   EyeOff,
   Undo2,
@@ -12,16 +14,15 @@ import {
   Share2,
   Compass,
   Layers,
-  Users,
 } from "lucide-react";
 
 interface ToolbarProps {
   hasData: boolean;
+  onCalculateDensidad: () => void;
   onCalculateCentralidad: () => void;
   onCalculatePageRank: () => void;
   onCalculateBetweenness: () => void;
   onCalculateCloseness: () => void;
-  onCitasAB: () => void;
   onShowStats: () => void;
   onToggleLabels: () => void;
   onApplyColors: () => void;
@@ -34,11 +35,11 @@ interface ToolbarProps {
 
 export default function Toolbar({
   hasData,
+  onCalculateDensidad,
   onCalculateCentralidad,
   onCalculatePageRank,
   onCalculateBetweenness,
   onCalculateCloseness,
-  onCitasAB,
   onShowStats,
   onToggleLabels,
   onShowAll,
@@ -56,6 +57,15 @@ export default function Toolbar({
             Calcular
           </span>
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={onCalculateDensidad}
+              disabled={!hasData || isCalculating}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-700/60 hover:bg-slate-600/60 text-slate-200 border border-slate-600/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Calcular densidad del grafo"
+            >
+              <Calculator className="w-4 h-4" />
+              <span className="text-sm font-medium">Densidad</span>
+            </button>
             <button
               onClick={onCalculateCentralidad}
               disabled={!hasData || isCalculating}
@@ -91,15 +101,6 @@ export default function Toolbar({
             >
               <Compass className="w-4 h-4" />
               <span className="text-sm font-medium">Closeness</span>
-            </button>
-            <button
-              onClick={onCitasAB}
-              disabled={!hasData || isCalculating}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Clasificar Citas A/B por autores"
-            >
-              <Users className="w-4 h-4" />
-              <span className="text-sm font-medium">Citas A/B</span>
             </button>
           </div>
         </div>

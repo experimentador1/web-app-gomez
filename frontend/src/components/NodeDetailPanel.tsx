@@ -10,17 +10,23 @@ import {
   BookOpen,
   Hash,
   FileText,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { obtenerVertice } from "../services/api";
 
 interface NodeDetailPanelProps {
   nodeId: string | null;
   onClose: () => void;
+  onShowAll?: () => void;
+  onOcultarDependientes?: () => void;
 }
 
 export default function NodeDetailPanel({
   nodeId,
   onClose,
+  onShowAll,
+  onOcultarDependientes,
 }: NodeDetailPanelProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["vertice", nodeId],
@@ -69,18 +75,11 @@ export default function NodeDetailPanel({
             </div>
 
             {/* Autores */}
-            {data.informacion.authors && data.informacion.authors.length > 0 && (
+            {data.informacion.authors.length > 0 && (
               <div className="flex items-start gap-2">
                 <Users className="w-4 h-4 text-slate-500 mt-1 flex-shrink-0" />
                 <p className="text-sm text-slate-400">
-                  {data.informacion.authors.map((author: unknown) => {
-                    if (typeof author === 'string') return author;
-                    if (typeof author === 'object' && author !== null) {
-                      const a = author as { name?: string; nombre?: string };
-                      return a.name || a.nombre || 'Desconocido';
-                    }
-                    return 'Desconocido';
-                  }).join(", ")}
+                  {data.informacion.authors.join(", ")}
                 </p>
               </div>
             )}
@@ -205,6 +204,30 @@ export default function NodeDetailPanel({
                 </span>
               )}
             </div>
+
+            {/* Botones de acción */}
+            {(onShowAll || onOcultarDependientes) && (
+              <div className="pt-2 border-t border-slate-700/50 space-y-2">
+                {onOcultarDependientes && (
+                  <button
+                    onClick={onOcultarDependientes}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg transition-colors font-medium text-sm"
+                  >
+                    <EyeOff className="w-4 h-4" />
+                    Ocultar dependientes
+                  </button>
+                )}
+                {onShowAll && (
+                  <button
+                    onClick={onShowAll}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 rounded-lg transition-colors font-medium text-sm"
+                  >
+                    <Eye className="w-4 h-4" />
+                    Mostrar todos los nodos
+                  </button>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>

@@ -51,12 +51,11 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Configurar CORS - Permitir todos los orígenes para producción
-logger.info(f"CORS_ORIGINS configurado: {settings.CORS_ORIGINS}")
+# Configurar CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permitir todos los orígenes
-    allow_credentials=False,  # Debe ser False cuando allow_origins es "*"
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

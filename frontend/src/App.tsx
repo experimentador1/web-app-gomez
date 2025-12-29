@@ -16,7 +16,6 @@ import StatsPanel from "./components/StatsPanel";
 import Toolbar from "./components/Toolbar";
 import ColorPanel from "./components/ColorPanel";
 import StatsModal from "./components/StatsModal";
-import CitasABModal from "./components/CitasABModal";
 
 import {
   buscarSincrono,
@@ -26,6 +25,8 @@ import {
   importarGrafo,
   obtenerGrafo,
   clasificarCitasAB,
+  ocultarDependientes,
+  mostrarTodosVertices,
   CitasABResponse,
 } from "./services/api";
 import type { BusquedaRequest, VisJSData, MetricasResponse } from "./types/grafo";
@@ -51,8 +52,6 @@ function Dashboard() {
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [metricas, setMetricas] = useState<MetricasResponse | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
-  const [showCitasABModal, setShowCitasABModal] = useState(false);
-  const [citasABReporte, setCitasABReporte] = useState<CitasABResponse["reporte"] | null>(null);
 
   const hasData = grafoData.nodes.length > 0;
 
@@ -98,10 +97,24 @@ function Dashboard() {
   }, []);
 
   const handleNodeClick = useCallback((nodeId: string) => {
+    // Un clic: mostrar panel de detalles
     setSelectedNode(nodeId);
   }, []);
 
   // Handlers de métricas
+  const handleCalculateDensidad = useCallback(async () => {
+    if (!hasData) return;
+    setIsCalculating(true);
+    try {
+      const stats = await obtenerEstadisticas();
+      alert(`Densidad del grafo: ${(stats.densidad * 100).toFixed(4)}%`);
+    } catch (error) {
+      console.error("Error:", error);
+    } finally {
+      setIsCalculating(false);
+    }
+  }, [hasData]);
+
   const handleCalculateCentralidad = useCallback(async () => {
     if (!hasData) return;
     setIsCalculating(true);
@@ -153,26 +166,6 @@ function Dashboard() {
       alert("Closeness calculado. Ver panel de estadísticas.");
     } catch (error) {
       console.error("Error:", error);
-    } finally {
-      setIsCalculating(false);
-    }
-  }, [hasData]);
-
-  const handleCitasAB = useCallback(async () => {
-    if (!hasData) return;
-    setIsCalculating(true);
-    try {
-      const response = await clasificarCitasAB();
-      // Actualizar el grafo con los nuevos colores
-      setGrafoData(response.grafo);
-      // Mostrar el reporte
-      setCitasABReporte(response.reporte);
-      setShowCitasABModal(true);
-    } catch (error) {
-      console.error("Error en Citas A/B:", error);
-      setSearchError(
-        error instanceof Error ? error.message : "Error al clasificar Citas A/B"
-      );
     } finally {
       setIsCalculating(false);
     }
@@ -525,11 +518,11 @@ function Dashboard() {
             {/* Toolbar */}
             <Toolbar
               hasData={hasData}
+              onCalculateDensidad={handleCalculateDensidad}
               onCalculateCentralidad={handleCalculateCentralidad}
               onCalculatePageRank={handleCalculatePageRank}
               onCalculateBetweenness={handleCalculateBetweenness}
               onCalculateCloseness={handleCalculateCloseness}
-              onCitasAB={handleCitasAB}
               onShowStats={handleShowStats}
               onToggleLabels={handleToggleLabels}
               onApplyColors={() => {}}
@@ -587,6 +580,26 @@ function Dashboard() {
       <NodeDetailPanel
         nodeId={selectedNode}
         onClose={() => setSelectedNode(null)}
+        onShowAll={async () => {
+          try {
+            const resultado = await mostrarTodosVertices();
+            setGrafoData(resultado.grafo);
+          } catch (error) {
+            console.error("Error al mostrar todos:", error);
+          }
+        }}
+        onOcultarDependientes={
+          selectedNode
+            ? async () => {
+                try {
+                  const resultado = await ocultarDependientes(selectedNode);
+                  setGrafoData(resultado.grafo);
+                } catch (error) {
+                  console.error("Error al ocultar dependientes:", error);
+                }
+              }
+            : undefined
+        }
       />
 
       <StatsModal
@@ -595,12 +608,6 @@ function Dashboard() {
         metricas={metricas}
         numVertices={grafoData.nodes.length}
         numAristas={grafoData.edges.length}
-      />
-
-      <CitasABModal
-        isOpen={showCitasABModal}
-        onClose={() => setShowCitasABModal(false)}
-        reporte={citasABReporte}
       />
     </div>
   );
