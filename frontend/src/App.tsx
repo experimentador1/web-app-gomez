@@ -589,10 +589,13 @@ function Dashboard() {
           selectedNode
             ? async () => {
                 try {
+                  console.log("🔍 Ocultando dependientes de:", selectedNode);
                   const resultado = await ocultarDependientes(selectedNode);
+                  console.log("✅ Resultado:", resultado);
+                  console.log("📊 Grafo actualizado:", resultado.grafo);
                   setGrafoData(resultado.grafo);
                 } catch (error) {
-                  console.error("Error al ocultar dependientes:", error);
+                  console.error("❌ Error al ocultar dependientes:", error);
                 }
               }
             : undefined
