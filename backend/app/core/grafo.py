@@ -312,6 +312,72 @@ class Grafo:
                 count += 1
         return count
     
+    def clasificar_citas_ab(self) -> Dict[str, Any]:
+        """
+        Clasifica los vértices del grafo según el algoritmo de Citas A/B.
+        
+        Clasificación:
+        - A: Vértices que solo tienen citas (grado_entrada > 0 y grado_salida == 0)
+        - B: Vértices que tienen referencias (grado_salida > 0)
+        - AB: Vértices raíz con referencias (tipo='raiz' y grado_salida > 0)
+        - S: Vértices sin clasificar (sin citas ni referencias)
+        
+        Returns:
+            Dict con estadísticas de la clasificación
+        """
+        # Colores para cada categoría
+        colores = {
+            "A": "#FF6B6B",   # Rojo
+            "B": "#4ECDC4",   # Cyan
+            "AB": "#FFD93D",  # Amarillo
+            "S": "#95A5A6"    # Gris
+        }
+        
+        # Contadores
+        clasificados = {"A": 0, "B": 0, "AB": 0, "S": 0}
+        detalles = {
+            "vertices_A": [],
+            "vertices_B": [],
+            "vertices_AB": [],
+            "vertices_S": []
+        }
+        
+        # Clasificar cada vértice
+        for vid, vertice in self.vertices.items():
+            tiene_citas = vertice.grado_entrada > 0
+            tiene_referencias = vertice.grado_salida > 0
+            es_raiz = vertice.tipo_cita == "raiz"
+            
+            if es_raiz and tiene_referencias:
+                # AB: Raíz con referencias
+                tipo = "AB"
+                vertice.color = colores["AB"]
+            elif tiene_referencias:
+                # B: Tiene referencias
+                tipo = "B"
+                vertice.color = colores["B"]
+            elif tiene_citas:
+                # A: Solo tiene citas
+                tipo = "A"
+                vertice.color = colores["A"]
+            else:
+                # S: Sin clasificar
+                tipo = "S"
+                vertice.color = colores["S"]
+            
+            # Actualizar contadores y listas
+            clasificados[tipo] += 1
+            detalles[f"vertices_{tipo}"].append(vid)
+            
+            # Guardar el tipo en el vértice
+            vertice.tipo_cita = tipo
+        
+        return {
+            "total_vertices": self.num_vertices(),
+            "clasificados": clasificados,
+            "detalles": detalles
+        }
+    
     # ==================== MÉTRICAS ====================
     
     def calcular_densidad(self) -> float:
