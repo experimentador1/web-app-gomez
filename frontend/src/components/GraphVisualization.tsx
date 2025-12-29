@@ -153,42 +153,15 @@ export default function GraphVisualization({
     setIsStabilizing(true);
     setStabilizationProgress(0);
 
-    // Obtener IDs existentes
-    const existingNodeIds = nodesRef.current.getIds();
-    const existingEdgeIds = edgesRef.current.getIds();
-    
-    // Obtener IDs nuevos
-    const newNodeIds = data.nodes.map(n => n.id);
-    const newEdgeIds = data.edges.map(e => e.id);
-    
-    // Nodos a eliminar (existen pero ya no están en data)
-    const nodesToRemove = existingNodeIds.filter(id => !newNodeIds.includes(id));
-    // Nodos a agregar (están en data pero no existen)
-    const nodesToAdd = data.nodes.filter(n => !existingNodeIds.includes(n.id));
-    // Nodos a actualizar (existen en ambos)
-    const nodesToUpdate = data.nodes.filter(n => existingNodeIds.includes(n.id));
-    
-    // Aristas a eliminar
-    const edgesToRemove = existingEdgeIds.filter(id => !newEdgeIds.includes(id));
-    // Aristas a agregar
-    const edgesToAdd = data.edges.filter(e => !existingEdgeIds.includes(e.id));
-    // Aristas a actualizar
-    const edgesToUpdate = data.edges.filter(e => existingEdgeIds.includes(e.id));
-    
-    // Aplicar cambios
-    if (nodesToRemove.length > 0) nodesRef.current.remove(nodesToRemove);
-    if (nodesToAdd.length > 0) nodesRef.current.add(nodesToAdd);
-    if (nodesToUpdate.length > 0) nodesRef.current.update(nodesToUpdate);
-    
-    if (edgesToRemove.length > 0) edgesRef.current.remove(edgesToRemove);
-    if (edgesToAdd.length > 0) edgesRef.current.add(edgesToAdd);
-    if (edgesToUpdate.length > 0) edgesRef.current.update(edgesToUpdate);
+    // Limpiar y agregar nuevos datos
+    nodesRef.current.clear();
+    edgesRef.current.clear();
+    nodesRef.current.add(data.nodes);
+    edgesRef.current.add(data.edges);
 
-    // Re-estabilizar solo si hay cambios significativos
-    if (networkRef.current && (nodesToAdd.length > 0 || nodesToRemove.length > 0)) {
+    // Re-estabilizar
+    if (networkRef.current) {
       networkRef.current.stabilize();
-    } else {
-      setIsStabilizing(false);
     }
   }, [data]);
 
