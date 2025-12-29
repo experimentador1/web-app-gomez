@@ -154,6 +154,8 @@ class GrafoService:
                 logger.info(f"Grafo fusionado (citas): {stats}")
             else:
                 self.grafo_actual = grafo_nuevo
+                # Asegurar que todos los nodos sean visibles al crear un grafo nuevo
+                self.grafo_actual.mostrar_todos()
             
             if task:
                 task.grafo = self.grafo_actual
@@ -219,6 +221,8 @@ class GrafoService:
                 logger.info(f"Grafo fusionado (referencias): {stats}")
             else:
                 self.grafo_actual = grafo_nuevo
+                # Asegurar que todos los nodos sean visibles al crear un grafo nuevo
+                self.grafo_actual.mostrar_todos()
             
             if task:
                 task.grafo = self.grafo_actual
