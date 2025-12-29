@@ -269,11 +269,15 @@ export interface CitasABResponse {
   };
 }
 
+interface CitasABFullResponse extends CitasABResponse {
+  grafo: VisJSData;
+}
+
 /**
  * Clasifica el grafo usando el algoritmo de Citas A/B.
  */
-export async function clasificarCitasAB(): Promise<CitasABResponse> {
-  const { data } = await api.post<CitasABResponse>("/citas-ab");
+export async function clasificarCitasAB(): Promise<CitasABFullResponse> {
+  const { data } = await api.post<CitasABFullResponse>("/citas-ab");
   return data;
 }
 

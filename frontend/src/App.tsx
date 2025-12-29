@@ -25,11 +25,10 @@ import {
   obtenerEstadisticas,
   importarGrafo,
   obtenerGrafo,
-  clasificarCitasAB,
   ocultarDependientes,
   mostrarTodosVertices,
-  CitasABResponse,
 } from "./services/api";
+import { clasificarCitasAB, type CitasABResponse } from "./services/api";
 import type { BusquedaRequest, VisJSData, MetricasResponse } from "./types/grafo";
 
 const queryClient = new QueryClient({
@@ -184,12 +183,20 @@ function Dashboard() {
     if (!hasData) return;
     setIsCalculating(true);
     try {
-      const reporte = await clasificarCitasAB();
+      const respuesta = await clasificarCitasAB();
+      // El reporte viene en la respuesta sin el campo 'grafo'
+      const reporte: CitasABResponse = {
+        mensaje: respuesta.mensaje,
+        total_vertices: respuesta.total_vertices,
+        clasificados: respuesta.clasificados,
+        detalles: respuesta.detalles,
+      };
       setCitasABReport(reporte);
       setShowCitasABModal(true);
-      // Actualizar grafo con colores A/B
-      const grafoActualizado = await obtenerGrafo();
-      setGrafoData(grafoActualizado);
+      // Actualizar grafo con colores A/B (viene en la respuesta)
+      if (respuesta.grafo) {
+        setGrafoData(respuesta.grafo);
+      }
     } catch (error) {
       console.error("Error al clasificar Citas A/B:", error);
       alert("Error al clasificar Citas A/B");
