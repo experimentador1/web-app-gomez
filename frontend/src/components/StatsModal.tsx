@@ -1,7 +1,7 @@
 // components/StatsModal.tsx
 // Modal de estadísticas detalladas
 
-import { X, TrendingUp, Network, Target, Share2 } from "lucide-react";
+import { X, TrendingUp, Target } from "lucide-react";
 import type { MetricasResponse } from "../types/grafo";
 
 interface StatsModalProps {
