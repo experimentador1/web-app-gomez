@@ -250,5 +250,32 @@ export async function mostrarTodosVertices(): Promise<{
   return data;
 }
 
+// ==================== CLASIFICACIÓN CITAS A/B ====================
+
+export interface CitasABResponse {
+  mensaje: string;
+  total_vertices: number;
+  clasificados: {
+    A: number;
+    B: number;
+    AB: number;
+    S: number;
+  };
+  detalles: {
+    vertices_A: string[];
+    vertices_B: string[];
+    vertices_AB: string[];
+    vertices_S: string[];
+  };
+}
+
+/**
+ * Clasifica el grafo usando el algoritmo de Citas A/B.
+ */
+export async function clasificarCitasAB(): Promise<CitasABResponse> {
+  const { data } = await api.post<CitasABResponse>("/citas-ab");
+  return data;
+}
+
 export default api;
 
