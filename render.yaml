@@ -12,8 +12,6 @@ services:
         value: "3.11.0"
       - key: DEBUG
         value: "false"
-      - key: CORS_ORIGINS
-        value: "https://grafo-gomez-web.onrender.com"
 
   # Frontend React (como web service con Node)
   - type: web
