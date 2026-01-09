@@ -12,6 +12,9 @@ services:
         value: "3.11.0"
       - key: DEBUG
         value: "false"
+      # CORS: Cambiar a "true" temporalmente para debug de CORS
+      - key: ALLOW_ALL_ORIGINS
+        value: "false"
 
   # Frontend React (como web service con Node)
   - type: web

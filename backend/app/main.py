@@ -52,12 +52,19 @@ app = FastAPI(
 )
 
 # Configurar CORS
+# Si ALLOW_ALL_ORIGINS=true, permite todos los orígenes (útil para debug)
+cors_origins = ["*"] if settings.ALLOW_ALL_ORIGINS else settings.CORS_ORIGINS
+
+logger.info(f"🔒 CORS configurado para: {cors_origins}")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_origins=cors_origins,
+    allow_credentials=not settings.ALLOW_ALL_ORIGINS,  # No se pueden usar credentials con "*"
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
+    expose_headers=["*"],
+    max_age=3600,  # Cache preflight por 1 hora
 )
 
 # Registrar routers
