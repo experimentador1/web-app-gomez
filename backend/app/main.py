@@ -1,7 +1,7 @@
 # main.py
 # Punto de entrada de la aplicación FastAPI
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
@@ -51,20 +51,51 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Configurar CORS
-# Si ALLOW_ALL_ORIGINS=true, permite todos los orígenes (útil para debug)
-cors_origins = ["*"] if settings.ALLOW_ALL_ORIGINS else settings.CORS_ORIGINS
 
-logger.info(f"🔒 CORS configurado para: {cors_origins}")
+# Middleware personalizado para manejar OPTIONS ANTES de validación de body
+@app.middleware("http")
+async def cors_preflight_handler(request: Request, call_next):
+    """
+    Intercepta peticiones OPTIONS (CORS preflight) y las responde inmediatamente.
+    Esto evita que FastAPI intente validar el body en peticiones OPTIONS.
+    """
+    if request.method == "OPTIONS":
+        origin = request.headers.get("origin", "")
+        
+        # Verificar si el origen está permitido
+        allowed = origin in settings.CORS_ORIGINS if origin else False
+        
+        if allowed or not origin:  # Permitir si no hay origin (testing)
+            logger.info(f"✅ OPTIONS interceptado para {request.url.path} desde {origin}")
+            return Response(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": origin or "*",
+                    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+                    "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin",
+                    "Access-Control-Max-Age": "3600",
+                    "Access-Control-Allow-Credentials": "true",
+                    "Content-Length": "0",
+                }
+            )
+        else:
+            logger.warning(f"⚠️ OPTIONS rechazado para {request.url.path} desde {origin}")
+    
+    response = await call_next(request)
+    return response
+
+
+# Configurar CORS (middleware estándar de FastAPI)
+logger.info(f"🔒 CORS configurado para: {settings.CORS_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=not settings.ALLOW_ALL_ORIGINS,  # No se pueden usar credentials con "*"
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
-    max_age=3600,  # Cache preflight por 1 hora
+    max_age=3600,
 )
 
 # Registrar routers
