@@ -1,30 +1,22 @@
 // components/CitasABModal.tsx
 // Modal para mostrar el reporte de clasificación Citas A/B
 
-import { X, Circle, Users, ArrowRight } from "lucide-react";
+import { X, Circle, Users } from "lucide-react";
 
 interface CitasABReporte {
-  corrida1: {
-    total_vertices: number;
-    pintados_azul: number;
-    omitidos_sin_autores: number;
+  mensaje: string;
+  total_vertices: number;
+  clasificados: {
+    A: number;
+    B: number;
+    AB: number;
+    S: number;
   };
-  corrida2: {
-    aristas_evaluadas: number;
-    pares_B: number;
-    vertices_amarillo: number;
-    muestras: Array<{ origen: string; destino: string }>;
-  };
-  corrida3: {
-    raices_ab: number;
-    vertices_verde: number;
-  };
-  resumen: {
-    tipo_A: number;
-    tipo_B: number;
-    tipo_AB: number;
-    tipo_S: number;
-    total: number;
+  detalles: {
+    vertices_A: string[];
+    vertices_B: string[];
+    vertices_AB: string[];
+    vertices_S: string[];
   };
 }
 
@@ -41,7 +33,7 @@ export default function CitasABModal({
 }: CitasABModalProps) {
   if (!isOpen || !reporte) return null;
 
-  const { corrida1, corrida2, corrida3, resumen } = reporte;
+  const { clasificados, total_vertices } = reporte;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -80,156 +72,149 @@ export default function CitasABModal({
         <div className="p-6 overflow-y-auto max-h-[calc(85vh-140px)]">
           {/* Resumen principal */}
           <div className="grid grid-cols-4 gap-4 mb-6">
-            <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 text-center">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
               <div className="flex items-center justify-center gap-2 mb-2">
-                <Circle className="w-4 h-4 fill-blue-500 text-blue-500" />
-                <span className="text-sm font-medium text-blue-400">Tipo A</span>
+                <Circle className="w-4 h-4 fill-red-500 text-red-500" />
+                <span className="text-sm font-medium text-red-400">Tipo A</span>
               </div>
-              <p className="text-2xl font-bold text-blue-400">{resumen.tipo_A}</p>
-              <p className="text-xs text-slate-500 mt-1">Sin coincidencias</p>
+              <p className="text-2xl font-bold text-red-400">{clasificados.A}</p>
+              <p className="text-xs text-slate-500 mt-1">Solo citas</p>
+            </div>
+
+            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <Circle className="w-4 h-4 fill-cyan-500 text-cyan-500" />
+                <span className="text-sm font-medium text-cyan-400">Tipo B</span>
+              </div>
+              <p className="text-2xl font-bold text-cyan-400">{clasificados.B}</p>
+              <p className="text-xs text-slate-500 mt-1">Con referencias</p>
             </div>
 
             <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-center">
               <div className="flex items-center justify-center gap-2 mb-2">
                 <Circle className="w-4 h-4 fill-yellow-500 text-yellow-500" />
-                <span className="text-sm font-medium text-yellow-400">Tipo B</span>
+                <span className="text-sm font-medium text-yellow-400">Tipo AB</span>
               </div>
-              <p className="text-2xl font-bold text-yellow-400">{resumen.tipo_B}</p>
-              <p className="text-xs text-slate-500 mt-1">Auto-citación</p>
+              <p className="text-2xl font-bold text-yellow-400">{clasificados.AB}</p>
+              <p className="text-xs text-slate-500 mt-1">Raíz con refs</p>
             </div>
 
-            <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
+            <div className="bg-gray-500/10 border border-gray-500/30 rounded-xl p-4 text-center">
               <div className="flex items-center justify-center gap-2 mb-2">
-                <Circle className="w-4 h-4 fill-green-500 text-green-500" />
-                <span className="text-sm font-medium text-green-400">Tipo AB</span>
+                <Circle className="w-4 h-4 fill-gray-500 text-gray-500" />
+                <span className="text-sm font-medium text-gray-400">Tipo S</span>
               </div>
-              <p className="text-2xl font-bold text-green-400">{resumen.tipo_AB}</p>
-              <p className="text-xs text-slate-500 mt-1">Raíces cadenas</p>
-            </div>
-
-            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                <Circle className="w-4 h-4 fill-red-500 text-red-500" />
-                <span className="text-sm font-medium text-red-400">Tipo S</span>
-              </div>
-              <p className="text-2xl font-bold text-red-400">{resumen.tipo_S}</p>
-              <p className="text-xs text-slate-500 mt-1">Sin autores</p>
+              <p className="text-2xl font-bold text-gray-400">{clasificados.S}</p>
+              <p className="text-xs text-slate-500 mt-1">Sin clasificar</p>
             </div>
           </div>
 
-          {/* Detalles de corridas */}
+          {/* Descripción del algoritmo */}
           <div className="space-y-4">
-            {/* Corrida 1 */}
             <div className="bg-slate-800/50 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 bg-blue-500/20 rounded-lg flex items-center justify-center text-xs text-blue-400">
-                  1
-                </span>
-                Corrida 1: Clasificación inicial
+              <h3 className="text-sm font-semibold text-slate-300 mb-3">
+                Clasificación de vértices
               </h3>
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div>
-                  <p className="text-slate-500">Total vértices</p>
-                  <p className="text-slate-200 font-medium">{corrida1.total_vertices}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Pintados azul</p>
-                  <p className="text-blue-400 font-medium">{corrida1.pintados_azul}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Sin autores (rojo)</p>
-                  <p className="text-red-400 font-medium">{corrida1.omitidos_sin_autores}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Corrida 2 */}
-            <div className="bg-slate-800/50 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 bg-yellow-500/20 rounded-lg flex items-center justify-center text-xs text-yellow-400">
-                  2
-                </span>
-                Corrida 2: Detección de auto-citación
-              </h3>
-              <div className="grid grid-cols-3 gap-4 text-sm mb-4">
-                <div>
-                  <p className="text-slate-500">Aristas evaluadas</p>
-                  <p className="text-slate-200 font-medium">{corrida2.aristas_evaluadas}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Pares tipo B</p>
-                  <p className="text-yellow-400 font-medium">{corrida2.pares_B}</p>
-                </div>
-                <div>
-                  <p className="text-slate-500">Vértices amarillo</p>
-                  <p className="text-yellow-400 font-medium">{corrida2.vertices_amarillo}</p>
-                </div>
-              </div>
-
-              {/* Muestras de pares B */}
-              {corrida2.muestras.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-slate-700/50">
-                  <p className="text-xs text-slate-500 mb-2">Ejemplos de auto-citación:</p>
-                  <div className="space-y-1 max-h-32 overflow-y-auto">
-                    {corrida2.muestras.slice(0, 5).map((muestra, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900/50 px-2 py-1 rounded"
-                      >
-                        <span className="truncate max-w-[200px]" title={muestra.origen}>
-                          {muestra.origen}
-                        </span>
-                        <ArrowRight className="w-3 h-3 text-yellow-500 flex-shrink-0" />
-                        <span className="truncate max-w-[200px]" title={muestra.destino}>
-                          {muestra.destino}
-                        </span>
-                      </div>
-                    ))}
+              <div className="space-y-3 text-sm">
+                <div className="flex items-start gap-3">
+                  <div className="w-4 h-4 rounded-full bg-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-slate-200 font-medium">Tipo A (Solo citas)</p>
+                    <p className="text-slate-400 text-xs mt-1">
+                      Vértices que solo reciben citas, no citan a otros (grado entrada &gt; 0, grado salida = 0)
+                    </p>
                   </div>
                 </div>
-              )}
-            </div>
-
-            {/* Corrida 3 */}
-            <div className="bg-slate-800/50 rounded-xl p-4">
-              <h3 className="text-sm font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <span className="w-6 h-6 bg-green-500/20 rounded-lg flex items-center justify-center text-xs text-green-400">
-                  3
-                </span>
-                Corrida 3: Raíces de cadenas A/B
-              </h3>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <p className="text-slate-500">Raíces detectadas</p>
-                  <p className="text-green-400 font-medium">{corrida3.raices_ab}</p>
+                <div className="flex items-start gap-3">
+                  <div className="w-4 h-4 rounded-full bg-cyan-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-slate-200 font-medium">Tipo B (Con referencias)</p>
+                    <p className="text-slate-400 text-xs mt-1">
+                      Vértices que citan a otros artículos (grado salida &gt; 0)
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-slate-500">Vértices verde</p>
-                  <p className="text-green-400 font-medium">{corrida3.vertices_verde}</p>
+                <div className="flex items-start gap-3">
+                  <div className="w-4 h-4 rounded-full bg-yellow-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-slate-200 font-medium">Tipo AB (Raíz con referencias)</p>
+                    <p className="text-slate-400 text-xs mt-1">
+                      Vértices raíz de la búsqueda que además citan a otros (tipo='raiz' y grado salida &gt; 0)
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="w-4 h-4 rounded-full bg-gray-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-slate-200 font-medium">Tipo S (Sin clasificar)</p>
+                    <p className="text-slate-400 text-xs mt-1">
+                      Vértices sin citas ni referencias (grado entrada = 0, grado salida = 0)
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Leyenda */}
+          {/* Estadísticas adicionales */}
           <div className="mt-6 p-4 bg-slate-800/30 rounded-xl">
-            <h4 className="text-sm font-semibold text-slate-400 mb-3">Leyenda de colores</h4>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-blue-500" />
-                <span className="text-slate-300">A (Azul): Citas independientes</span>
+            <h4 className="text-sm font-semibold text-slate-400 mb-3">Distribución</h4>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Tipo A (Solo citas)</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-red-500" 
+                      style={{ width: `${(clasificados.A / total_vertices) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-slate-300 font-medium w-12 text-right">
+                    {((clasificados.A / total_vertices) * 100).toFixed(1)}%
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-yellow-500" />
-                <span className="text-slate-300">B (Amarillo): Auto-citación</span>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Tipo B (Con referencias)</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-cyan-500" 
+                      style={{ width: `${(clasificados.B / total_vertices) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-slate-300 font-medium w-12 text-right">
+                    {((clasificados.B / total_vertices) * 100).toFixed(1)}%
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-green-500" />
-                <span className="text-slate-300">AB (Verde): Origen de cadenas</span>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Tipo AB (Raíz+refs)</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-yellow-500" 
+                      style={{ width: `${(clasificados.AB / total_vertices) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-slate-300 font-medium w-12 text-right">
+                    {((clasificados.AB / total_vertices) * 100).toFixed(1)}%
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-red-500" />
-                <span className="text-slate-300">S (Rojo): Sin datos de autor</span>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-slate-400">Tipo S (Sin clasificar)</span>
+                <div className="flex items-center gap-2">
+                  <div className="w-32 h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-gray-500" 
+                      style={{ width: `${(clasificados.S / total_vertices) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-slate-300 font-medium w-12 text-right">
+                    {((clasificados.S / total_vertices) * 100).toFixed(1)}%
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -239,7 +224,7 @@ export default function CitasABModal({
         <div className="p-4 border-t border-slate-700/50 bg-slate-900/50">
           <div className="flex justify-between items-center">
             <p className="text-sm text-slate-500">
-              Total artículos analizados: <span className="text-slate-300 font-medium">{resumen.total}</span>
+              Total artículos analizados: <span className="text-slate-300 font-medium">{total_vertices}</span>
             </p>
             <button
               onClick={onClose}

@@ -184,14 +184,8 @@ function Dashboard() {
     setIsCalculating(true);
     try {
       const respuesta = await clasificarCitasAB();
-      // El reporte viene en la respuesta sin el campo 'grafo'
-      const reporte: CitasABResponse = {
-        mensaje: respuesta.mensaje,
-        total_vertices: respuesta.total_vertices,
-        clasificados: respuesta.clasificados,
-        detalles: respuesta.detalles,
-      };
-      setCitasABReport(reporte);
+      // Guardar el reporte completo
+      setCitasABReport(respuesta);
       setShowCitasABModal(true);
       // Actualizar grafo con colores A/B (viene en la respuesta)
       if (respuesta.grafo) {
