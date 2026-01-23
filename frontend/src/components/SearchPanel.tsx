@@ -25,15 +25,15 @@ interface SearchPanelProps {
 
 const MOTORES: { value: MotorBusqueda; label: string }[] = [
   { value: "semantic_scholar", label: "Semantic Scholar" },
-  { value: "open_citations", label: "Open Citations" },
-  { value: "crossref", label: "CrossRef" },
-  { value: "openalex", label: "OpenAlex" },
-  { value: "europe_pmc", label: "Europe PMC" },
-  { value: "lens", label: "Lens.org" },
-  { value: "openaire", label: "OpenAIRE" },
-  { value: "datacite", label: "DataCite" },
-  { value: "zenodo", label: "Zenodo" },
-  { value: "orcid", label: "ORCID" },
+ // { value: "open_citations", label: "Open Citations" },
+ // { value: "crossref", label: "CrossRef" },
+ // { value: "openalex", label: "OpenAlex" },
+ // { value: "europe_pmc", label: "Europe PMC" },
+ // { value: "lens", label: "Lens.org" },
+ // { value: "openaire", label: "OpenAIRE" },
+ // { value: "datacite", label: "DataCite" },
+ // { value: "zenodo", label: "Zenodo" },
+ // { value: "orcid", label: "ORCID" },
 ];
 
 export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
