@@ -79,7 +79,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
             htmlFor="titulo"
             className="block text-sm font-semibold text-slate-300 mb-2"
           >
-            Nombre (Título o DOI)
+            Nombre (Título )
           </label>
           <input
             id="titulo"
