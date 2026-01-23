@@ -121,7 +121,7 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
               className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl text-slate-100 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 text-base"
               disabled={isLoading}
             >
-              {[0, 1, 2, 3, 4, 5].map((n) => (
+              {[0, 1, 2].map((n) => (
                 <option key={n} value={n}>
                   {n}
                 </option>
