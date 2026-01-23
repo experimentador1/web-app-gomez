@@ -267,17 +267,14 @@ export interface CitasABResponse {
     vertices_AB: string[];
     vertices_S: string[];
   };
-}
-
-interface CitasABFullResponse extends CitasABResponse {
-  grafo: VisJSData;
+  grafo?: VisJSData; // Grafo actualizado con colores A/B
 }
 
 /**
  * Clasifica el grafo usando el algoritmo de Citas A/B.
  */
-export async function clasificarCitasAB(): Promise<CitasABFullResponse> {
-  const { data } = await api.post<CitasABFullResponse>("/citas-ab");
+export async function clasificarCitasAB(): Promise<CitasABResponse> {
+  const { data } = await api.post<CitasABResponse>("/citas-ab");
   return data;
 }
 

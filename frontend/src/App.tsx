@@ -28,7 +28,7 @@ import {
   ocultarDependientes,
   mostrarTodosVertices,
 } from "./services/api";
-import { clasificarCitasAB, type CitasABResponse } from "./services/api";
+import { ejecutarCitasAB, type ReporteCitasAB } from "./utils/citasAB";
 import type { BusquedaRequest, VisJSData, MetricasResponse } from "./types/grafo";
 
 const queryClient = new QueryClient({
@@ -51,7 +51,7 @@ function Dashboard() {
   const [showLabels, setShowLabels] = useState(true);
   const [showStatsModal, setShowStatsModal] = useState(false);
   const [showCitasABModal, setShowCitasABModal] = useState(false);
-  const [citasABReport, setCitasABReport] = useState<CitasABResponse | null>(null);
+  const [citasABReport, setCitasABReport] = useState<ReporteCitasAB | null>(null);
   const [metricas, setMetricas] = useState<MetricasResponse | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
 
@@ -64,14 +64,14 @@ function Dashboard() {
     setSelectedNode(null);
 
     try {
-      // Siempre fusionar con el grafo existente (merge: true)
-      // El usuario debe usar el botón "Borrar" para limpiar el grafo antes de una nueva búsqueda
-      const requestConMerge = {
+      // Cada búsqueda reemplaza el grafo anterior (merge: false)
+      // Para fusionar, el usuario puede usar Leer-Pro > Agregar
+      const requestSinMerge = {
         ...request,
-        merge: true, // Fusionar con grafo existente
+        merge: false, // Reemplazar grafo existente
       };
       
-      const data = await buscarSincrono(requestConMerge);
+      const data = await buscarSincrono(requestSinMerge);
       setGrafoData(data);
       // Calcular métricas automáticamente
       const stats = await obtenerMetricas(true, false, false);
@@ -179,25 +179,23 @@ function Dashboard() {
     }
   }, [hasData]);
 
-  const handleCitasAB = useCallback(async () => {
+  const handleCitasAB = useCallback(() => {
     if (!hasData) return;
     setIsCalculating(true);
     try {
-      const respuesta = await clasificarCitasAB();
-      // Guardar el reporte completo
-      setCitasABReport(respuesta);
+      // Ejecutar las 3 corridas localmente (basado en Dashboard_articulos.py)
+      const reporte = ejecutarCitasAB(grafoData);
+      setCitasABReport(reporte);
       setShowCitasABModal(true);
-      // Actualizar grafo con colores A/B (viene en la respuesta)
-      if (respuesta.grafo) {
-        setGrafoData(respuesta.grafo);
-      }
+      // Actualizar grafo con colores A/B del reporte
+      setGrafoData(reporte.grafo);
     } catch (error) {
       console.error("Error al clasificar Citas A/B:", error);
       alert("Error al clasificar Citas A/B");
     } finally {
       setIsCalculating(false);
     }
-  }, [hasData]);
+  }, [hasData, grafoData]);
 
   const handleToggleLabels = useCallback(() => {
     setShowLabels((prev) => !prev);
@@ -615,14 +613,10 @@ function Dashboard() {
           selectedNode
             ? async () => {
                 try {
-                  console.log("🔍 Ocultando dependientes de:", selectedNode);
                   const resultado = await ocultarDependientes(selectedNode);
-                  console.log("✅ Resultado:", resultado);
-                  console.log("📊 Nodos ocultados:", resultado.ocultados);
                   setGrafoData(resultado.grafo);
                 } catch (error) {
-                  console.error("❌ Error al ocultar dependientes:", error);
-                  alert("Error al ocultar dependientes: " + (error as Error).message);
+                  console.error("Error al ocultar dependientes:", error);
                 }
               }
             : undefined

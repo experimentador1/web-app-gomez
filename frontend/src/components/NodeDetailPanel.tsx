@@ -79,7 +79,9 @@ export default function NodeDetailPanel({
               <div className="flex items-start gap-2">
                 <Users className="w-4 h-4 text-slate-500 mt-1 flex-shrink-0" />
                 <p className="text-sm text-slate-400">
-                  {data.informacion.authors.join(", ")}
+                  {data.informacion.authors.map((a: string | { name?: string }) => 
+                    typeof a === "string" ? a : (a?.name || "Autor desconocido")
+                  ).join(", ")}
                 </p>
               </div>
             )}
