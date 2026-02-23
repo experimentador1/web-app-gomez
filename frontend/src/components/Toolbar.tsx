@@ -18,6 +18,7 @@ import {
 
 interface ToolbarProps {
   hasData: boolean;
+  canUndo?: boolean;
   onCalculateDensidad: () => void;
   onCalculateCentralidad: () => void;
   onCalculatePageRank: () => void;
@@ -36,6 +37,7 @@ interface ToolbarProps {
 
 export default function Toolbar({
   hasData,
+  canUndo = false,
   onCalculateDensidad,
   onCalculateCentralidad,
   onCalculatePageRank,
@@ -174,9 +176,9 @@ export default function Toolbar({
           <div className="flex items-center gap-1.5">
             <button
               onClick={onUndo}
-              disabled={!hasData}
+              disabled={!hasData || !canUndo}
               className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-700/60 hover:bg-slate-600/60 text-slate-200 border border-slate-600/50 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-              title="Deshacer última acción"
+              title="Deshacer: volver al grafo anterior"
             >
               <Undo2 className="w-4 h-4" />
               <span className="text-sm font-medium">Deshacer</span>

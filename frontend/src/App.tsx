@@ -1,7 +1,7 @@
 // App.tsx
 // Aplicación principal del Dashboard de Artículos Académicos
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import {
   QueryClient,
   QueryClientProvider,
@@ -54,26 +54,36 @@ function Dashboard() {
   const [citasABReport, setCitasABReport] = useState<ReporteCitasAB | null>(null);
   const [metricas, setMetricas] = useState<MetricasResponse | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+  const grafoHistoryRef = useRef<VisJSData[]>([]);
+  const MAX_HISTORY = 30;
 
   const hasData = grafoData.nodes.length > 0;
 
-  // Handlers de búsqueda
+  const pushToHistory = useCallback((data: VisJSData) => {
+    if (data.nodes.length === 0) return;
+    const stack = grafoHistoryRef.current;
+    stack.push(JSON.parse(JSON.stringify(data)));
+    if (stack.length > MAX_HISTORY) stack.shift();
+    setCanUndo(stack.length > 0);
+  }, []);
+
+  // Handlers de búsqueda: nuevas búsquedas se fusionan con el grafo actual
   const handleSearch = useCallback(async (request: BusquedaRequest) => {
     setIsSearching(true);
     setSearchError(null);
     setSelectedNode(null);
 
     try {
-      // Cada búsqueda reemplaza el grafo anterior (merge: false)
-      // Para fusionar, el usuario puede usar Leer-Pro > Agregar
-      const requestSinMerge = {
+      if (grafoData.nodes.length > 0) {
+        pushToHistory(grafoData);
+      }
+      const requestConMerge = {
         ...request,
-        merge: false, // Reemplazar grafo existente
+        merge: true,
       };
-      
-      const data = await buscarSincrono(requestSinMerge);
+      const data = await buscarSincrono(requestConMerge);
       setGrafoData(data);
-      // Calcular métricas automáticamente
       const stats = await obtenerMetricas(true, false, false);
       setMetricas(stats);
     } catch (error) {
@@ -84,7 +94,7 @@ function Dashboard() {
     } finally {
       setIsSearching(false);
     }
-  }, []);
+  }, [grafoData, pushToHistory]);
 
   const handleClearGraph = useCallback(async () => {
     try {
@@ -92,6 +102,8 @@ function Dashboard() {
       setGrafoData({ nodes: [], edges: [] });
       setSelectedNode(null);
       setMetricas(null);
+      grafoHistoryRef.current = [];
+      setCanUndo(false);
       queryClient.invalidateQueries({ queryKey: ["estadisticas"] });
     } catch (error) {
       console.error("Error al limpiar grafo:", error);
@@ -224,9 +236,26 @@ function Dashboard() {
     }));
   }, []);
 
-  const handleUndo = useCallback(() => {
-    // Por implementar: historial de acciones
-    console.log("Deshacer");
+  const handleUndo = useCallback(async () => {
+    const stack = grafoHistoryRef.current;
+    if (stack.length === 0) return;
+    const previous = stack.pop()!;
+    setCanUndo(stack.length > 0);
+    try {
+      await importarGrafo(previous, false);
+      setGrafoData(previous);
+      setSelectedNode(null);
+      if (previous.nodes.length > 0) {
+        const stats = await obtenerMetricas(true, false, false);
+        setMetricas(stats);
+      } else {
+        setMetricas(null);
+      }
+    } catch (error) {
+      console.error("Error al deshacer:", error);
+      stack.push(previous);
+      setCanUndo(stack.length > 0);
+    }
   }, []);
 
   // Handlers de archivos
@@ -257,26 +286,25 @@ function Dashboard() {
       reader.onload = async (event) => {
         try {
           const content = event.target?.result as string;
-          let grafoData: { nodes: unknown[]; edges: unknown[] };
+          let parsedGrafo: { nodes: unknown[]; edges: unknown[] };
 
           if (file.name.endsWith(".csv")) {
-            // Parsear CSV
-            grafoData = parseCSV(content);
+            parsedGrafo = parseCSV(content);
           } else {
-            // Parsear JSON
-            grafoData = JSON.parse(content);
+            parsedGrafo = JSON.parse(content);
           }
 
-          if (!grafoData.nodes || !Array.isArray(grafoData.nodes)) {
+          if (!parsedGrafo.nodes || !Array.isArray(parsedGrafo.nodes)) {
             throw new Error("El archivo no contiene nodos válidos");
           }
 
-          // Enviar al backend para que lo procese
           setIsSearching(true);
           setSearchError(null);
 
           try {
-            // Verificar si el backend ya tiene un grafo cargado
+            if (grafoData.nodes.length > 0) {
+              pushToHistory(grafoData);
+            }
             let shouldMerge = false;
             try {
               const estadisticas = await obtenerEstadisticas();
@@ -285,11 +313,9 @@ function Dashboard() {
               shouldMerge = false;
             }
             
-            console.log("Importando grafo, merge:", shouldMerge, "nodos:", grafoData.nodes.length, "aristas:", grafoData.edges.length);
-            
             const result = await importarGrafo(
-              grafoData as { nodes: never[]; edges: never[] },
-              shouldMerge // Siempre fusionar si ya hay datos en el backend
+              parsedGrafo as { nodes: never[]; edges: never[] },
+              shouldMerge
             );
             console.log("Grafo importado:", result);
 
@@ -326,7 +352,7 @@ function Dashboard() {
       reader.readAsText(file);
     };
     input.click();
-  }, []);
+  }, [grafoData, pushToHistory]);
 
   // Función auxiliar para parsear CSV (soporta formato de escritorio)
   const parseCSV = (content: string): { nodes: unknown[]; edges: unknown[] } => {
@@ -538,6 +564,7 @@ function Dashboard() {
             {/* Toolbar */}
             <Toolbar
               hasData={hasData}
+              canUndo={canUndo}
               onCalculateDensidad={handleCalculateDensidad}
               onCalculateCentralidad={handleCalculateCentralidad}
               onCalculatePageRank={handleCalculatePageRank}
