@@ -7,7 +7,6 @@ import asyncio
 
 from app.schemas.grafo import (
     BusquedaRequest,
-    BusquedaAutorRequest,
     GrafoResponse,
     VisJSResponse,
     ProgresoResponse,
@@ -92,6 +91,15 @@ async def buscar_sincrono(request: BusquedaRequest):
                 motor=request.motor,
                 niveles=request.niveles,
                 max_hijos=request.max_hijos,
+                api_key=request.api_key,
+                merge=request.merge
+            )
+        elif request.tipo == TipoBusqueda.AUTOR:
+            limite_articulos = request.max_hijos if request.max_hijos is not None else 50
+            grafo = await grafo_service.buscar_por_autor(
+                nombre_autor=request.titulo,
+                motor=request.motor,
+                limite_articulos=min(limite_articulos, 500),
                 api_key=request.api_key,
                 merge=request.merge
             )

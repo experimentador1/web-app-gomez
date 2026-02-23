@@ -135,6 +135,23 @@ export default function GraphVisualization({
     networkRef.current.on("stabilizationIterationsDone", () => {
       setIsStabilizing(false);
       setStabilizationProgress(100);
+      // Desactivar física para que los nodos se queden donde el usuario los suelte
+      networkRef.current?.setOptions({ physics: { enabled: false } });
+    });
+
+    // Al soltar un nodo tras arrastrarlo, fijar su posición en el DataSet para que no vuelva
+    networkRef.current.on("dragEnd", (params: { nodes: string[] }) => {
+      if (params.nodes.length === 0 || !networkRef.current || !nodesRef.current) return;
+      const nodeId = params.nodes[0];
+      const pos = networkRef.current.getPositions([nodeId]);
+      if (pos && pos[nodeId]) {
+        nodesRef.current.update({
+          id: nodeId,
+          x: pos[nodeId].x,
+          y: pos[nodeId].y,
+          fixed: true,
+        } as Partial<VisNode> & { id: string });
+      }
     });
 
     // Cleanup

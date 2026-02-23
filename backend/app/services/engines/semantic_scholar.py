@@ -436,3 +436,67 @@ class SemanticScholarEngine:
                 return [self._map_paper_to_info(p) for p in data["data"]]
             return []
 
+    async def generar_grafo_autor(
+        self,
+        nombre_autor: str,
+        limite_articulos: int = 50,
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+    ) -> Grafo:
+        """
+        Genera un grafo con los artículos de un autor.
+        - Nodos: cada artículo + un nodo central para el autor (capa 1).
+        - Aristas: artículo -> autor (cada paper apunta al autor).
+        """
+        self.reset()
+        async with httpx.AsyncClient() as client:
+            autor = await self.buscar_autor(nombre_autor)
+            if not autor:
+                logger.warning(f"Autor no encontrado: {nombre_autor}")
+                return self.grafo
+
+            author_id = autor.get("authorId") or autor.get("id")
+            author_name = autor.get("name") or nombre_autor
+            if not author_id:
+                logger.warning("Respuesta de autor sin authorId")
+                return self.grafo
+
+            articulos = await self.obtener_articulos_autor(author_id, limite=limite_articulos)
+            if not articulos:
+                logger.warning(f"No se encontraron artículos para {author_name}")
+                return self.grafo
+
+            # Nodo del autor (capa 1, centro del grafo)
+            self.grafo.agregar_vertice(author_name)
+            vertice_autor = self.grafo.busca_vertice(author_name)
+            if vertice_autor:
+                vertice_autor.informacion = ArticuloInfo(
+                    title=author_name,
+                    categoria="autor"
+                )
+                vertice_autor.capa = 1
+                vertice_autor.tipo_cita = "raiz"
+                vertice_autor.motor = self.nombre_motor
+
+            for i, paper_info in enumerate(articulos):
+                if self._cancel_requested:
+                    break
+                titulo = paper_info.get("title") or paper_info.get("paperId") or f"Paper_{i}"
+                if not titulo or titulo in self.visitados:
+                    continue
+                self.grafo.agregar_o_actualizar_vertice(titulo, paper_info)
+                vertice = self.grafo.busca_vertice(titulo)
+                if vertice:
+                    vertice.tipo_cita = "referencia"
+                    vertice.motor = self.nombre_motor
+                # Arista: artículo -> autor
+                self.grafo.agregar_arista(titulo, author_name, 1.0)
+                self.visitados.add(titulo)
+                if progress_callback:
+                    progress_callback({
+                        "n_vertices": self.grafo.num_vertices(),
+                        "n_aristas": self.grafo.num_aristas(),
+                        "mensaje": f"Artículos: {len(self.visitados)}/{limite_articulos}",
+                    })
+
+        return self.grafo
+

@@ -239,6 +239,33 @@ class GrafoService:
                 task.completed_at = datetime.now()
             raise
     
+    async def buscar_por_autor(
+        self,
+        nombre_autor: str,
+        motor: MotorBusqueda = MotorBusqueda.SEMANTIC_SCHOLAR,
+        limite_articulos: int = 50,
+        api_key: Optional[str] = None,
+        merge: bool = False
+    ) -> Grafo:
+        """
+        Busca artículos por autor y construye el grafo (autor + sus papers).
+        Si merge=True, fusiona con el grafo existente; si False, reemplaza.
+        """
+        config = SearchConfig(api_key=api_key, max_children=limite_articulos)
+        engine = self._get_engine(motor, config)
+        grafo_nuevo = await engine.generar_grafo_autor(
+            nombre_autor=nombre_autor,
+            limite_articulos=limite_articulos,
+        )
+        if merge and self.grafo_actual:
+            stats = self.grafo_actual.merge(grafo_nuevo)
+            logger.info(f"Grafo fusionado (autor): {stats}")
+        else:
+            self.grafo_actual = grafo_nuevo
+            if self.grafo_actual:
+                self.grafo_actual.mostrar_todos()
+        return self.grafo_actual or grafo_nuevo
+
     async def buscar_paper(
         self,
         titulo: str,

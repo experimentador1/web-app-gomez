@@ -73,20 +73,26 @@ export default function SearchPanel({ onSearch, isLoading }: SearchPanelProps) {
       </h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Campo de título */}
+        {/* Campo de título o nombre de autor */}
         <div>
           <label
             htmlFor="titulo"
             className="block text-sm font-semibold text-slate-300 mb-2"
           >
-            Nombre (Título )
+            {tipo === "autor"
+              ? "Nombre del autor"
+              : "Nombre (Título)"}
           </label>
           <input
             id="titulo"
             type="text"
             value={titulo}
             onChange={(e) => setTitulo(e.target.value)}
-            placeholder="Ej: Deep Learning for NLP"
+            placeholder={
+              tipo === "autor"
+                ? "Ej: Geoffrey Hinton, Yann LeCun"
+                : "Ej: Deep Learning for NLP"
+            }
             className="w-full px-4 py-3 bg-slate-900/50 border border-slate-600 rounded-xl text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500 transition-all text-base"
             disabled={isLoading}
           />
