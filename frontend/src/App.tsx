@@ -7,7 +7,7 @@ import {
   QueryClientProvider,
   useQuery,
 } from "@tanstack/react-query";
-import { BookOpen, Download, Save, FolderOpen, RefreshCw } from "lucide-react";
+import { BookOpen, Download, Save, FolderOpen, RefreshCw, Users } from "lucide-react";
 
 import GraphVisualization from "./components/GraphVisualization";
 import SearchPanel from "./components/SearchPanel";
@@ -17,6 +17,7 @@ import Toolbar from "./components/Toolbar";
 import ColorPanel from "./components/ColorPanel";
 import StatsModal from "./components/StatsModal";
 import CitasABModal from "./components/CitasABModal";
+import TeamModal from "./components/TeamModal";
 
 import {
   buscarSincrono,
@@ -54,6 +55,7 @@ function Dashboard() {
   const [citasABReport, setCitasABReport] = useState<ReporteCitasAB | null>(null);
   const [metricas, setMetricas] = useState<MetricasResponse | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [showTeamModal, setShowTeamModal] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
   const grafoHistoryRef = useRef<VisJSData[]>([]);
   const MAX_HISTORY = 30;
@@ -513,6 +515,14 @@ function Dashboard() {
 
             <div className="flex items-center gap-3">
               <button
+                onClick={() => setShowTeamModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition-colors text-sm font-medium border border-slate-700"
+                title="Equipo y cómo citar"
+              >
+                <Users className="w-4 h-4" />
+                <span className="hidden sm:inline">Acerca de</span>
+              </button>
+              <button
                 onClick={handleLoad}
                 className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition-colors text-sm font-medium border border-slate-700"
                 title="Leer archivo"
@@ -662,6 +672,11 @@ function Dashboard() {
         isOpen={showCitasABModal}
         onClose={() => setShowCitasABModal(false)}
         reporte={citasABReport}
+      />
+
+      <TeamModal
+        isOpen={showTeamModal}
+        onClose={() => setShowTeamModal(false)}
       />
     </div>
   );
