@@ -503,7 +503,7 @@ function Dashboard() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-slate-100">
-                  Dashboard de Artículos Académicos
+                  grafocitas.com
                 </h1>
                 <p className="text-sm text-slate-400">
                   Redes de citaciones y referencias
