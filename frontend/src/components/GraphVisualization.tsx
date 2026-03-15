@@ -10,8 +10,27 @@ interface GraphVisualizationProps {
   data: VisJSData;
   onNodeClick?: (nodeId: string) => void;
   onNodeDoubleClick?: (nodeId: string) => void;
+  /** Llamado al soltar un nodo tras arrastrarlo; sirve para guardar x,y en el backend (Guardar Pro). */
+  onNodePositionChange?: (nodeId: string, x: number, y: number) => void | Promise<void>;
+  /** Llamado con la posición x,y en vivo: al hacer click en el nodo (dragStart), mientras se mueve (dragging) y al soltar (dragEnd). Para mostrar en pantalla el valor actual. */
+  onPositionLive?: (nodeId: string, x: number, y: number) => void;
   height?: string;
   className?: string;
+}
+
+/**
+ * Si el grafo tiene al menos un nodo con coordenadas guardadas (x,y distintas de 0,0),
+ * no usar Force Atlas (respetar posiciones, ej. Leer Pro). Si no hay ninguna posición
+ * válida, activar Force Atlas para organizar el grafo al cargar.
+ */
+function graphHasSavedPositions(nodes: VisNode[]): boolean {
+  if (!nodes?.length) return false;
+  return nodes.some(
+    (n) =>
+      typeof n.x === "number" &&
+      typeof n.y === "number" &&
+      (n.x !== 0 || n.y !== 0)
+  );
 }
 
 const defaultOptions: Options = {
@@ -84,6 +103,8 @@ export default function GraphVisualization({
   data,
   onNodeClick,
   onNodeDoubleClick,
+  onNodePositionChange,
+  onPositionLive,
   height = "600px",
   className = "",
 }: GraphVisualizationProps) {
@@ -91,12 +112,45 @@ export default function GraphVisualization({
   const networkRef = useRef<Network | null>(null);
   const nodesRef = useRef<DataSet<VisNode> | null>(null);
   const edgesRef = useRef<DataSet<VisEdge> | null>(null);
+  // Refs estables para callbacks
+  const onNodePositionChangeRef = useRef(onNodePositionChange);
+  onNodePositionChangeRef.current = onNodePositionChange;
+  const onPositionLiveRef = useRef(onPositionLive);
+  onPositionLiveRef.current = onPositionLive;
+  // Ref que almacena el nodo siendo arrastrado actualmente
+  const draggingNodeRef = useRef<string | null>(null);
+  // Refs directos al DOM del overlay HUD de coordenadas (sin pasar por React state = sin lag)
+  const hudOverlayRef = useRef<HTMLDivElement | null>(null);
+  const hudXRef = useRef<HTMLSpanElement | null>(null);
+  const hudYRef = useRef<HTMLSpanElement | null>(null);
   const [isStabilizing, setIsStabilizing] = useState(true);
   const [stabilizationProgress, setStabilizationProgress] = useState(0);
+
+  /**
+   * Lee la posición del nodo desde vis.js y:
+   * 1. Actualiza el overlay HUD directamente en el DOM (sin React state = instantáneo)
+   * 2. Notifica via onPositionLive al panel de detalle (React state, puede llegar con lag)
+   */
+  const updatePositionDisplay = useCallback((nodeId: string) => {
+    if (!networkRef.current) return;
+    const pos = networkRef.current.getPositions([nodeId]);
+    if (!pos?.[nodeId]) return;
+    const { x, y } = pos[nodeId];
+    // Actualización directa al DOM: sin re-render de React, completamente inmediata
+    if (hudXRef.current) hudXRef.current.textContent = x.toFixed(2);
+    if (hudYRef.current) hudYRef.current.textContent = y.toFixed(2);
+    // También notificar al panel de detalle via React (eventual)
+    onPositionLiveRef.current?.(nodeId, x, y);
+  }, []);
 
   // Inicializar la red
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const hasPositions = graphHasSavedPositions(data.nodes);
+    const options: Options = hasPositions
+      ? { ...defaultOptions, physics: { enabled: false } }
+      : defaultOptions;
 
     // Crear DataSets
     nodesRef.current = new DataSet<VisNode>(data.nodes);
@@ -107,17 +161,20 @@ export default function GraphVisualization({
       edges: edgesRef.current,
     };
 
-    // Crear la red
+    // Crear la red (con física desactivada si el grafo trae posiciones, ej. Pro)
     networkRef.current = new Network(
       containerRef.current,
       networkData,
-      defaultOptions
+      options
     );
 
     // Event handlers
     networkRef.current.on("click", (params) => {
-      if (params.nodes.length > 0 && onNodeClick) {
-        onNodeClick(params.nodes[0] as string);
+      if (params.nodes.length > 0) {
+        const nodeId = params.nodes[0] as string;
+        // Al abrir el panel, mostrar la posición real del nodo en el canvas (no 0,0 del backend)
+        updatePositionDisplay(nodeId);
+        if (onNodeClick) onNodeClick(nodeId);
       }
     });
 
@@ -137,38 +194,114 @@ export default function GraphVisualization({
       setStabilizationProgress(100);
       // Desactivar física para que los nodos se queden donde el usuario los suelte
       networkRef.current?.setOptions({ physics: { enabled: false } });
-    });
-
-    // Al soltar un nodo tras arrastrarlo, fijar su posición en el DataSet para que no vuelva
-    networkRef.current.on("dragEnd", (params: { nodes: string[] }) => {
-      if (params.nodes.length === 0 || !networkRef.current || !nodesRef.current) return;
-      const nodeId = params.nodes[0];
-      const pos = networkRef.current.getPositions([nodeId]);
-      if (pos && pos[nodeId]) {
-        nodesRef.current.update({
-          id: nodeId,
-          x: pos[nodeId].x,
-          y: pos[nodeId].y,
-          fixed: true,
-        } as Partial<VisNode> & { id: string });
+      // Actualizar el tooltip (title) de cada nodo con la posición real asignada por Force Atlas,
+      // para que al hacer hover se muestren las coordenadas correctas (no 0,0 del backend)
+      if (nodesRef.current && networkRef.current) {
+        const allIds = nodesRef.current.getIds() as string[];
+        const positions = networkRef.current.getPositions(allIds);
+        const updates: Array<Partial<VisNode> & { id: string; title: string }> = [];
+        for (const id of allIds) {
+          const pos = positions[id];
+          if (!pos) continue;
+          const node = nodesRef.current.get(id) as (VisNode & { title?: string }) | undefined;
+          if (!node) continue;
+          const base = (node.title ?? "").replace(/\nCoordenadas en canvas:.*$/s, "").trimEnd();
+          updates.push({
+            id,
+            title: base + `\nCoordenadas en canvas: x=${pos.x.toFixed(2)}, y=${pos.y.toFixed(2)}`,
+          } as Partial<VisNode> & { id: string; title: string });
+        }
+        if (updates.length > 0) nodesRef.current.update(updates);
       }
     });
 
+    // Si el grafo ya trae posiciones (Pro), no hay estabilización
+    if (hasPositions) {
+      setIsStabilizing(false);
+      setStabilizationProgress(100);
+    }
+
+    // ── Arrastre de nodos ──────────────────────────────────────────────────────────
+    // dragStart: registrar qué nodo se está arrastrando y mostrar HUD
+    networkRef.current.on("dragStart", (params: { nodes: string[] }) => {
+      if (params.nodes.length === 0) return;
+      draggingNodeRef.current = params.nodes[0];
+      if (hudOverlayRef.current) hudOverlayRef.current.style.display = "flex";
+      updatePositionDisplay(params.nodes[0]);
+    });
+
+    // dragEnd: leer posición final exacta desde vis.js, actualizar tooltip y guardar en backend
+    networkRef.current.on("dragEnd", (params: { nodes: string[] }) => {
+      const nodeId = draggingNodeRef.current ?? params.nodes[0];
+      draggingNodeRef.current = null;
+      if (hudOverlayRef.current) hudOverlayRef.current.style.display = "none";
+      if (!nodeId || !networkRef.current || !nodesRef.current) return;
+
+      const pos = networkRef.current.getPositions([nodeId]);
+      if (pos?.[nodeId]) {
+        const x = pos[nodeId].x;
+        const y = pos[nodeId].y;
+        if (hudXRef.current) hudXRef.current.textContent = x.toFixed(2);
+        if (hudYRef.current) hudYRef.current.textContent = y.toFixed(2);
+        onPositionLiveRef.current?.(nodeId, x, y);
+        // Actualizar tooltip del nodo con coordenadas finales
+        const node = nodesRef.current.get(nodeId) as (VisNode & { title?: string }) | undefined;
+        const baseTitle = node?.title ?? "";
+        const coordsLine = `\nCoordenadas en canvas: x=${x.toFixed(2)}, y=${y.toFixed(2)}`;
+        const newTitle = baseTitle.replace(/\nCoordenadas en canvas:.*$/s, "").trimEnd() + coordsLine;
+        nodesRef.current.update({
+          id: nodeId, x, y, title: newTitle,
+        } as Partial<VisNode> & { id: string; title: string });
+        onNodePositionChangeRef.current?.(nodeId, x, y);
+      }
+    });
+
+    // ── Tracking de mouse via DOM nativo ──────────────────────────────────────────
+    // vis.js crea un <canvas> dentro del contenedor. Escuchamos mousemove directamente
+    // sobre ese canvas para obtener coordenadas DOM y convertirlas a canvas con DOMtoCanvas().
+    // Esto es MÁS CONFIABLE que el evento "dragging" de vis.js en ciertos builds.
+    const visCanvas = containerRef.current.querySelector("canvas");
+    const onMouseMove = (e: MouseEvent) => {
+      const nodeId = draggingNodeRef.current;
+      if (!nodeId || !networkRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      // Coordenadas del puntero relativas al contenedor del grafo
+      const domPos = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      // Convertir coordenadas DOM → coordenadas del canvas de vis.js
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const canvasPos = (networkRef.current as any).DOMtoCanvas(domPos) as { x: number; y: number };
+      // Actualizar HUD directamente en el DOM (sin React state = sin lag)
+      if (hudXRef.current) hudXRef.current.textContent = canvasPos.x.toFixed(2);
+      if (hudYRef.current) hudYRef.current.textContent = canvasPos.y.toFixed(2);
+      // Notificar al panel de detalle via React (asíncrono pero eventual)
+      onPositionLiveRef.current?.(nodeId, canvasPos.x, canvasPos.y);
+    };
+    visCanvas?.addEventListener("mousemove", onMouseMove);
+
     // Cleanup
     return () => {
+      visCanvas?.removeEventListener("mousemove", onMouseMove);
       if (networkRef.current) {
         networkRef.current.destroy();
         networkRef.current = null;
       }
     };
-  }, []);
+  }, [updatePositionDisplay]);
 
   // Actualizar datos cuando cambien
   useEffect(() => {
-    if (!nodesRef.current || !edgesRef.current) return;
+    if (!nodesRef.current || !edgesRef.current || !networkRef.current) return;
 
-    setIsStabilizing(true);
-    setStabilizationProgress(0);
+    const hasPositions = graphHasSavedPositions(data.nodes);
+
+    if (hasPositions) {
+      setIsStabilizing(false);
+      setStabilizationProgress(100);
+      networkRef.current.setOptions({ physics: { enabled: false } });
+    } else {
+      setIsStabilizing(true);
+      setStabilizationProgress(0);
+    }
 
     // Limpiar y agregar nuevos datos
     nodesRef.current.clear();
@@ -176,8 +309,8 @@ export default function GraphVisualization({
     nodesRef.current.add(data.nodes);
     edgesRef.current.add(data.edges);
 
-    // Re-estabilizar
-    if (networkRef.current) {
+    // Re-estabilizar solo si hay física (sin posiciones guardadas)
+    if (!hasPositions && networkRef.current) {
       networkRef.current.stabilize();
     }
   }, [data]);
@@ -204,6 +337,39 @@ export default function GraphVisualization({
 
   return (
     <div className={`relative ${className}`}>
+      {/* ── HUD de coordenadas en vivo ──
+          Se muestra SOLO mientras el usuario arrastra un nodo.
+          Actualizado directamente via DOM refs (sin React state = sin lag de re-render).
+          Se oculta automáticamente al soltar el mouse (dragEnd). */}
+      <div
+        ref={hudOverlayRef}
+        style={{ display: "none" }}
+        className="absolute top-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none
+                   bg-slate-950/95 border border-amber-500/70 rounded-xl
+                   px-5 py-2.5 flex items-center gap-4 shadow-2xl shadow-black/60
+                   backdrop-blur-sm"
+      >
+        <span className="text-xs font-semibold text-slate-400 uppercase tracking-widest">Canvas</span>
+        <span className="font-mono text-sm text-slate-300">
+          x:{" "}
+          <span
+            ref={hudXRef}
+            className="text-amber-400 font-bold text-base tabular-nums min-w-[70px] inline-block"
+          >
+            —
+          </span>
+        </span>
+        <span className="font-mono text-sm text-slate-300">
+          y:{" "}
+          <span
+            ref={hudYRef}
+            className="text-amber-400 font-bold text-base tabular-nums min-w-[70px] inline-block"
+          >
+            —
+          </span>
+        </span>
+      </div>
+
       {/* Barra de progreso de estabilización */}
       {isStabilizing && (
         <div className="absolute top-2 left-2 right-2 z-10">

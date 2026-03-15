@@ -3,6 +3,7 @@
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import logging
 
@@ -108,13 +109,18 @@ app.include_router(
 
 @app.get("/", tags=["Health"])
 async def root():
-    """Endpoint de salud."""
-    return {
+    """Endpoint de salud. Respuesta explícita en UTF-8 para evitar mojibake."""
+    content = {
         "mensaje": "Dashboard de Artículos Académicos API",
         "version": "1.0.0",
         "docs": "/docs",
-        "status": "healthy"
+        "status": "healthy",
     }
+    return JSONResponse(
+        content=content,
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Type": "application/json; charset=utf-8"},
+    )
 
 
 @app.get("/health", tags=["Health"])

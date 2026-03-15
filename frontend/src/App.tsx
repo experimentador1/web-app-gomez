@@ -6,6 +6,7 @@ import {
   QueryClient,
   QueryClientProvider,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 import { BookOpen, Download, Save, FolderOpen, RefreshCw, Users } from "lucide-react";
 
@@ -25,9 +26,14 @@ import {
   obtenerMetricas,
   obtenerEstadisticas,
   importarGrafo,
+  importarGrafoProJson,
+  importarGrafoProCsv,
+  exportarGrafo,
   obtenerGrafo,
   ocultarDependientes,
   mostrarTodosVertices,
+  setVerticeVisible,
+  setVerticePosicion,
 } from "./services/api";
 import { ejecutarCitasAB, type ReporteCitasAB } from "./utils/citasAB";
 import type { BusquedaRequest, VisJSData, MetricasResponse } from "./types/grafo";
@@ -42,6 +48,7 @@ const queryClient = new QueryClient({
 });
 
 function Dashboard() {
+  const localQueryClient = useQueryClient();
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [grafoData, setGrafoData] = useState<VisJSData>({
     nodes: [],
@@ -57,6 +64,12 @@ function Dashboard() {
   const [isCalculating, setIsCalculating] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
   const [canUndo, setCanUndo] = useState(false);
+  const [exportFormatoPro, setExportFormatoPro] = useState<"pro_json" | "pro_csv">("pro_json");
+  const [exportFormatoLite, setExportFormatoLite] = useState<"lite_json" | "lite_csv">("lite_json");
+  const [importarComo, setImportarComo] = useState<"lite" | "pro">("pro");
+  const [isExporting, setIsExporting] = useState(false);
+  /** Posición x,y en vivo del nodo que se está moviendo (desde click hasta release). Para mostrar en pantalla. */
+  const [posicionEnVivo, setPosicionEnVivo] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const grafoHistoryRef = useRef<VisJSData[]>([]);
   const MAX_HISTORY = 30;
 
@@ -260,21 +273,53 @@ function Dashboard() {
     }
   }, []);
 
-  // Handlers de archivos
-  const handleExportJSON = useCallback(() => {
-    const dataStr = JSON.stringify(grafoData, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `grafo-articulos-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [grafoData]);
+  const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
-  const handleSave = useCallback(() => {
-    handleExportJSON();
-  }, [handleExportJSON]);
+  // Guardar-Pro: grafo completo (abstract, toda la info). Formatos JSON o CSV.
+  const handleGuardarPro = useCallback(async () => {
+    if (!hasData) return;
+    setIsExporting(true);
+    setSearchError(null);
+    try {
+      await exportarGrafo(exportFormatoPro);
+    } catch (error) {
+      const msg =
+        error instanceof Error ? error.message : "Error al exportar Pro";
+      const isNetwork =
+        /failed to fetch|network error|err_connection_refused/i.test(msg) ||
+        (error as { code?: string })?.code === "ERR_NETWORK";
+      setSearchError(
+        isNetwork
+          ? `No se pudo conectar con el servidor. ¿Está corriendo el backend en ${apiBase}?`
+          : msg
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [hasData, exportFormatoPro, apiBase]);
+
+  // Guardar Lite: info básica (artículo, autores, citas). Formatos JSON o CSV.
+  const handleGuardarLite = useCallback(async () => {
+    if (!hasData) return;
+    setIsExporting(true);
+    setSearchError(null);
+    try {
+      await exportarGrafo(exportFormatoLite);
+    } catch (error) {
+      const msg =
+        error instanceof Error ? error.message : "Error al exportar Lite";
+      const isNetwork =
+        /failed to fetch|network error|err_connection_refused/i.test(msg) ||
+        (error as { code?: string })?.code === "ERR_NETWORK";
+      setSearchError(
+        isNetwork
+          ? `No se pudo conectar con el servidor. ¿Está corriendo el backend en ${apiBase}?`
+          : msg
+      );
+    } finally {
+      setIsExporting(false);
+    }
+  }, [hasData, exportFormatoLite, apiBase]);
 
   const handleLoad = useCallback(async () => {
     const input = document.createElement("input");
@@ -284,77 +329,68 @@ function Dashboard() {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (!file) return;
 
-      const reader = new FileReader();
-      reader.onload = async (event) => {
+      setIsSearching(true);
+      setSearchError(null);
+      try {
+        if (grafoData.nodes.length > 0) {
+          pushToHistory(grafoData);
+        }
+        let shouldMerge = false;
         try {
-          const content = event.target?.result as string;
-          let parsedGrafo: { nodes: unknown[]; edges: unknown[] };
+          const estadisticas = await obtenerEstadisticas();
+          shouldMerge = estadisticas.num_vertices > 0;
+        } catch {
+          shouldMerge = false;
+        }
 
-          if (file.name.endsWith(".csv")) {
-            parsedGrafo = parseCSV(content);
-          } else {
-            parsedGrafo = JSON.parse(content);
-          }
-
-          if (!parsedGrafo.nodes || !Array.isArray(parsedGrafo.nodes)) {
+        if (file.name.toLowerCase().endsWith(".csv")) {
+          await importarGrafoProCsv(file, shouldMerge, importarComo);
+        } else {
+          const content = await new Promise<string>((res, rej) => {
+            const reader = new FileReader();
+            reader.onload = () => res((reader.result as string) ?? "");
+            reader.onerror = rej;
+            reader.readAsText(file);
+          });
+          const parsed = JSON.parse(content) as { nodes?: unknown[]; edges?: unknown[] };
+          if (!parsed?.nodes || !Array.isArray(parsed.nodes)) {
             throw new Error("El archivo no contiene nodos válidos");
           }
-
-          setIsSearching(true);
-          setSearchError(null);
-
-          try {
-            if (grafoData.nodes.length > 0) {
-              pushToHistory(grafoData);
-            }
-            let shouldMerge = false;
-            try {
-              const estadisticas = await obtenerEstadisticas();
-              shouldMerge = estadisticas.num_vertices > 0;
-            } catch {
-              shouldMerge = false;
-            }
-            
-            const result = await importarGrafo(
-              parsedGrafo as { nodes: never[]; edges: never[] },
+          // Con "Leer Pro" o "Leer Lite" siempre usar el endpoint Pro para que se lean x,y y el resto de atributos
+          if (importarComo === "pro" || importarComo === "lite") {
+            await importarGrafoProJson({
+              nodes: parsed.nodes,
+              edges: parsed.edges ?? [],
+              merge: shouldMerge,
+              tipo: importarComo,
+            });
+          } else {
+            await importarGrafo(
+              parsed as { nodes: never[]; edges: never[] },
               shouldMerge
             );
-            console.log("Grafo importado:", result);
-
-            // Obtener el grafo actualizado del backend
-            const grafoActualizado = await obtenerGrafo();
-            setGrafoData(grafoActualizado);
-
-            // Calcular métricas
-            try {
-              const stats = await obtenerMetricas(true, false, false);
-              setMetricas(stats);
-            } catch {
-              // Métricas opcionales
-            }
-          } catch (error) {
-            console.error("Error al importar grafo:", error);
-            setSearchError(
-              error instanceof Error
-                ? error.message
-                : "Error al importar el archivo"
-            );
-          } finally {
-            setIsSearching(false);
           }
-        } catch (error) {
-          console.error("Error al cargar archivo:", error);
-          setSearchError(
-            error instanceof Error
-              ? error.message
-              : "Error al leer el archivo"
-          );
         }
-      };
-      reader.readAsText(file);
+
+        const grafoActualizado = await obtenerGrafo();
+        setGrafoData(grafoActualizado);
+        try {
+          const stats = await obtenerMetricas(true, false, false);
+          setMetricas(stats);
+        } catch {
+          /* métricas opcionales */
+        }
+      } catch (error) {
+        console.error("Error al importar grafo:", error);
+        setSearchError(
+          error instanceof Error ? error.message : "Error al importar el archivo"
+        );
+      } finally {
+        setIsSearching(false);
+      }
     };
     input.click();
-  }, [grafoData, pushToHistory]);
+  }, [grafoData, pushToHistory, importarComo]);
 
   // Función auxiliar para parsear CSV (soporta formato de escritorio)
   const parseCSV = (content: string): { nodes: unknown[]; edges: unknown[] } => {
@@ -522,31 +558,60 @@ function Dashboard() {
                 <Users className="w-4 h-4" />
                 <span className="hidden sm:inline">Acerca de</span>
               </button>
+              <select
+                value={importarComo}
+                onChange={(e) => setImportarComo(e.target.value as "lite" | "pro")}
+                className="px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-sm font-medium focus:ring-2 focus:ring-cyan-500/50"
+                title="Versión del archivo a importar"
+              >
+                <option value="lite">Lite (info mínima)</option>
+                <option value="pro">Pro (grafo completo)</option>
+              </select>
               <button
                 onClick={handleLoad}
                 className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition-colors text-sm font-medium border border-slate-700"
-                title="Leer archivo"
+                title="Importar grafo (JSON o CSV). Elige Lite o Pro según el archivo."
               >
                 <FolderOpen className="w-4 h-4" />
-                <span className="hidden sm:inline">Leer-Pro</span>
+                <span className="hidden sm:inline">Importar</span>
               </button>
               {hasData && (
                 <>
+                  <select
+                    value={exportFormatoPro}
+                    onChange={(e) => setExportFormatoPro(e.target.value as "pro_json" | "pro_csv")}
+                    className="px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-sm font-medium focus:ring-2 focus:ring-cyan-500/50"
+                    title="Formato Pro (completo)"
+                  >
+                    <option value="pro_json">Pro JSON</option>
+                    <option value="pro_csv">Pro CSV</option>
+                  </select>
                   <button
-                    onClick={handleSave}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl transition-colors text-sm font-medium border border-slate-700"
-                    title="Guardar grafo"
+                    onClick={handleGuardarPro}
+                    disabled={!hasData || isExporting}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-colors text-sm font-medium border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Guardar-Pro: grafo completo (abstract, autores, citas, referencias, etc.)"
                   >
                     <Save className="w-4 h-4" />
                     <span className="hidden sm:inline">Guardar-Pro</span>
                   </button>
+                  <select
+                    value={exportFormatoLite}
+                    onChange={(e) => setExportFormatoLite(e.target.value as "lite_json" | "lite_csv")}
+                    className="px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-200 text-sm font-medium focus:ring-2 focus:ring-cyan-500/50"
+                    title="Formato Lite (básico: artículo, autores, citas)"
+                  >
+                    <option value="lite_json">Lite JSON</option>
+                    <option value="lite_csv">Lite CSV</option>
+                  </select>
                   <button
-                    onClick={handleExportJSON}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-xl transition-colors text-sm font-medium border border-cyan-500/30"
-                    title="Exportar JSON"
+                    onClick={handleGuardarLite}
+                    disabled={!hasData || isExporting}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-xl transition-colors text-sm font-medium border border-cyan-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Guardar Lite: info mínima (artículo, autores, citas)"
                   >
                     <Download className="w-4 h-4" />
-                    <span className="hidden sm:inline">Exportar</span>
+                    <span className="hidden sm:inline">{isExporting ? "…" : "Guardar Lite"}</span>
                   </button>
                 </>
               )}
@@ -612,6 +677,19 @@ function Dashboard() {
                 <GraphVisualization
                   data={grafoData}
                   onNodeClick={handleNodeClick}
+                  onPositionLive={(nodeId, x, y) => setPosicionEnVivo({ nodeId, x, y })}
+                  onNodePositionChange={async (nodeId, x, y) => {
+                    try {
+                      await setVerticePosicion(nodeId, x, y);
+                      // Actualizar posición final en el indicador de pantalla
+                      setPosicionEnVivo({ nodeId, x, y });
+                      // Invalidar solo el query del vértice para que el panel muestre x,y actualizado
+                      // NO recargar grafoData completo (eso resetearía posiciones en vis.js)
+                      localQueryClient.invalidateQueries({ queryKey: ["vertice", nodeId] });
+                    } catch {
+                      /* fallo silencioso si el backend no está disponible */
+                    }
+                  }}
                   height="600px"
                 />
               )}
@@ -637,7 +715,11 @@ function Dashboard() {
       {/* Paneles laterales y modales */}
       <NodeDetailPanel
         nodeId={selectedNode}
-        onClose={() => setSelectedNode(null)}
+        onClose={() => {
+          setSelectedNode(null);
+          setPosicionEnVivo(null);
+        }}
+        posicionEnVivo={posicionEnVivo}
         onShowAll={async () => {
           try {
             const resultado = await mostrarTodosVertices();
@@ -654,6 +736,18 @@ function Dashboard() {
                   setGrafoData(resultado.grafo);
                 } catch (error) {
                   console.error("Error al ocultar dependientes:", error);
+                }
+              }
+            : undefined
+        }
+        onToggleVisible={
+          selectedNode
+            ? async (_nodeId, visible) => {
+                try {
+                  const resultado = await setVerticeVisible(selectedNode, visible);
+                  setGrafoData(resultado.grafo);
+                } catch (error) {
+                  console.error("Error al cambiar visibilidad:", error);
                 }
               }
             : undefined

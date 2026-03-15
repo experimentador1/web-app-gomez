@@ -146,6 +146,115 @@ export async function importarGrafo(
   return data;
 }
 
+// ==================== EXPORTAR (PRO / LITE / SUBGRAFO VISIBLE) ====================
+
+export type ExportFormato =
+  | "pro_json"
+  | "pro_csv"
+  | "lite_json"
+  | "lite_csv"
+  | "subgrafo_visible_pro_json"
+  | "subgrafo_visible_pro_csv"
+  | "subgrafo_visible_lite_json"
+  | "subgrafo_visible_lite_csv";
+
+const EXPORT_ENDPOINTS: Record<ExportFormato, { path: string; filename: string; json: boolean }> = {
+  pro_json: { path: "/grafo/exportar/pro/json", filename: "grafo_pro.json", json: true },
+  pro_csv: { path: "/grafo/exportar/pro/csv", filename: "grafo_pro.csv", json: false },
+  lite_json: { path: "/grafo/exportar/lite/json", filename: "grafo_lite.json", json: true },
+  lite_csv: { path: "/grafo/exportar/lite/csv", filename: "grafo_lite.csv", json: false },
+  subgrafo_visible_pro_json: {
+    path: "/grafo/exportar/subgrafo-visible/pro/json",
+    filename: "subgrafo_visible_pro.json",
+    json: true,
+  },
+  subgrafo_visible_pro_csv: {
+    path: "/grafo/exportar/subgrafo-visible/pro/csv",
+    filename: "subgrafo_visible_pro.csv",
+    json: false,
+  },
+  subgrafo_visible_lite_json: {
+    path: "/grafo/exportar/subgrafo-visible/lite/json",
+    filename: "subgrafo_visible_lite.json",
+    json: true,
+  },
+  subgrafo_visible_lite_csv: {
+    path: "/grafo/exportar/subgrafo-visible/lite/csv",
+    filename: "subgrafo_visible_lite.csv",
+    json: false,
+  },
+};
+
+/**
+ * Exporta el grafo en el formato indicado. Descarga siempre un archivo (JSON o CSV)
+ * con la estructura correcta: Pro incluye info (title, authors, year, venue, abstract,
+ * references, etc.) y coordenadas x, y por nodo.
+ */
+export async function exportarGrafo(
+  formato: ExportFormato
+): Promise<void> {
+  const { path, filename, json: isJson } = EXPORT_ENDPOINTS[formato];
+  const response = await api.get<Blob | Record<string, unknown>>(path, {
+    responseType: isJson ? "json" : "blob",
+    validateStatus: () => true,
+  });
+  if (response.status !== 200) {
+    const msg =
+      response.status === 404
+        ? "No hay grafo cargado. Realiza una búsqueda o importa un archivo."
+        : `Error ${response.status}: ${response.statusText}`;
+    throw new Error(msg);
+  }
+  const a = document.createElement("a");
+  if (isJson) {
+    const data = response.data as Record<string, unknown>;
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+    a.href = URL.createObjectURL(blob);
+  } else {
+    a.href = URL.createObjectURL(response.data as Blob);
+  }
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/**
+ * Importa grafo desde JSON. tipo: "lite" (info mínima) o "pro" (grafo completo).
+ */
+export async function importarGrafoProJson(payload: {
+  nodes: unknown[];
+  edges: unknown[];
+  merge?: boolean;
+  tipo?: "lite" | "pro";
+}): Promise<{ mensaje: string; total_vertices: number; total_aristas: number }> {
+  const { data } = await api.post<{
+    mensaje: string;
+    total_vertices: number;
+    total_aristas: number;
+  }>("/grafo/importar/pro/json", payload);
+  return data;
+}
+
+/**
+ * Importa grafo desde archivo CSV. tipo: "lite" (info mínima) o "pro" (grafo completo).
+ */
+export async function importarGrafoProCsv(
+  file: File,
+  merge = false,
+  tipo: "lite" | "pro" = "pro"
+): Promise<{ mensaje: string; total_vertices: number; total_aristas: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post<{
+    mensaje: string;
+    total_vertices: number;
+    total_aristas: number;
+  }>(`/grafo/importar/pro/csv?merge=${merge}&tipo=${tipo}`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
 // ==================== MÉTRICAS ====================
 
 /**
@@ -210,7 +319,40 @@ export async function listarVertices(
   return data;
 }
 
+// ==================== POSICIÓN ====================
+
+/**
+ * Actualiza la posición (x, y) de un nodo en el backend para que Guardar Pro exporte las coordenadas correctas.
+ */
+export async function setVerticePosicion(
+  verticeId: string,
+  x: number,
+  y: number
+): Promise<{ mensaje: string; x: number; y: number }> {
+  const { data } = await api.post<{ mensaje: string; vertice_id: string; x: number; y: number }>(
+    `/vertice/${encodeURIComponent(verticeId)}/posicion`,
+    { x, y }
+  );
+  return { mensaje: data.mensaje, x: data.x, y: data.y };
+}
+
 // ==================== VISIBILIDAD ====================
+
+/**
+ * Establece si un nodo es visible u oculto. Retorna el grafo actualizado.
+ */
+export async function setVerticeVisible(
+  verticeId: string,
+  visible: boolean
+): Promise<{ mensaje: string; visible: boolean; grafo: VisJSData }> {
+  const { data } = await api.post<{
+    mensaje: string;
+    vertice_id: string;
+    visible: boolean;
+    grafo: VisJSData;
+  }>(`/vertice/${encodeURIComponent(verticeId)}/visible`, { visible });
+  return { mensaje: data.mensaje, visible: data.visible, grafo: data.grafo };
+}
 
 /**
  * Oculta todos los nodos dependientes (nodos que apuntan al nodo dado).

@@ -1,9 +1,12 @@
 # api/v1/endpoints/grafo.py
 # Endpoints REST para el grafo de artículos académicos
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, UploadFile, File
+from fastapi.responses import Response, StreamingResponse
 from typing import Optional, Dict, Any, List
 import asyncio
+import csv
+import io
 
 from app.schemas.grafo import (
     BusquedaRequest,
@@ -233,6 +236,168 @@ async def obtener_grafo_json():
     return grafo_service.exportar_grafo(formato="json")
 
 
+# ==================== EXPORTAR (PRO / LITE / SUBGRAFO VISIBLE) ====================
+
+@router.get("/grafo/exportar/pro/json")
+async def exportar_grafo_pro_json():
+    """Exporta el grafo en formato JSON PRO (info completa, compatible con escritorio)."""
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    return grafo_service.exportar_grafo(formato="pro_json")
+
+
+@router.get("/grafo/exportar/pro/csv")
+async def exportar_grafo_pro_csv():
+    """Descarga el grafo como archivo CSV PRO."""
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    fieldnames, rows = grafo_service.exportar_grafo_csv(formato="pro")
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=grafo_pro.csv"}
+    )
+
+
+@router.get("/grafo/exportar/lite/json")
+async def exportar_grafo_lite_json():
+    """Exporta el grafo en formato JSON LITE (info limpiada)."""
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    return grafo_service.exportar_grafo(formato="lite_json")
+
+
+@router.get("/grafo/exportar/lite/csv")
+async def exportar_grafo_lite_csv():
+    """Descarga el grafo como archivo CSV LITE."""
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    fieldnames, rows = grafo_service.exportar_grafo_csv(formato="lite")
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=grafo_lite.csv"}
+    )
+
+
+@router.get("/grafo/exportar/subgrafo-visible/pro/json")
+async def exportar_subgrafo_visible_pro_json():
+    """Exporta solo los nodos visibles en formato JSON PRO."""
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    return grafo_service.exportar_grafo(formato="subgrafo_visible_pro_json")
+
+
+@router.get("/grafo/exportar/subgrafo-visible/pro/csv")
+async def exportar_subgrafo_visible_pro_csv():
+    """Descarga solo nodos visibles como CSV PRO."""
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    fieldnames, rows = grafo_service.exportar_grafo_csv(formato="subgrafo_visible_pro")
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=subgrafo_visible_pro.csv"}
+    )
+
+
+@router.get("/grafo/exportar/subgrafo-visible/lite/json")
+async def exportar_subgrafo_visible_lite_json():
+    """Exporta solo nodos visibles en formato JSON LITE."""
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    return grafo_service.exportar_grafo(formato="subgrafo_visible_lite_json")
+
+
+@router.get("/grafo/exportar/subgrafo-visible/lite/csv")
+async def exportar_subgrafo_visible_lite_csv():
+    """Descarga solo nodos visibles como CSV LITE."""
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    fieldnames, rows = grafo_service.exportar_grafo_csv(formato="subgrafo_visible_lite")
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=fieldnames, extrasaction="ignore", lineterminator="\n")
+    writer.writeheader()
+    writer.writerows(rows)
+    return Response(
+        content=buf.getvalue().encode("utf-8-sig"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=subgrafo_visible_lite.csv"}
+    )
+
+
+# ==================== IMPORTAR (PRO JSON / PRO CSV) ====================
+
+@router.post("/grafo/importar/pro/json")
+async def importar_grafo_pro_json(data: Dict[str, Any]):
+    """
+    Importa un grafo desde JSON.
+    Body: { "nodes": [...], "edges": [...], "merge": false, "tipo": "lite" | "pro" }
+    - tipo "pro": grafo completo (abstract, autores, citas, etc.).
+    - tipo "lite": info mínima (artículo, autores, citas).
+    """
+    if not data:
+        raise HTTPException(status_code=400, detail="Cuerpo vacío")
+    merge = data.get("merge", False)
+    tipo = (data.get("tipo") or "pro").lower()
+    if tipo not in ("lite", "pro"):
+        tipo = "pro"
+    try:
+        grafo_service.importar_grafo_pro_json(data, merge=merge, tipo=tipo)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al importar JSON: {str(e)}")
+    return {
+        "mensaje": f"Grafo importado correctamente (versión {tipo.upper()})",
+        "total_vertices": grafo_service.grafo_actual.num_vertices() if grafo_service.grafo_actual else 0,
+        "total_aristas": grafo_service.grafo_actual.num_aristas() if grafo_service.grafo_actual else 0,
+    }
+
+
+@router.post("/grafo/importar/pro/csv")
+async def importar_grafo_pro_csv(
+    merge: bool = Query(default=False, description="Fusionar con grafo existente"),
+    tipo: str = Query(default="pro", description="Versión del archivo: lite (mínimo) o pro (completo)"),
+    file: Optional[UploadFile] = File(None),
+):
+    """
+    Importa un grafo desde archivo CSV.
+    Envía el archivo como multipart/form-data con clave 'file'.
+    tipo: "lite" (info mínima) o "pro" (grafo completo).
+    """
+    if not file:
+        raise HTTPException(status_code=400, detail="Debe enviar un archivo CSV (form-data key 'file')")
+    if not file.filename or not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="El archivo debe ser .csv")
+    tipo = (tipo or "pro").lower()
+    if tipo not in ("lite", "pro"):
+        tipo = "pro"
+    try:
+        content = (await file.read()).decode("utf-8-sig")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al leer el archivo: {str(e)}")
+    try:
+        grafo_service.importar_grafo_pro_csv(content, merge=merge, tipo=tipo)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al importar CSV: {str(e)}")
+    return {
+        "mensaje": f"Grafo importado correctamente (versión {tipo.upper()})",
+        "total_vertices": grafo_service.grafo_actual.num_vertices() if grafo_service.grafo_actual else 0,
+        "total_aristas": grafo_service.grafo_actual.num_aristas() if grafo_service.grafo_actual else 0,
+    }
+
+
 @router.delete("/grafo")
 async def limpiar_grafo():
     """
@@ -395,6 +560,8 @@ async def obtener_vertice(vertice_id: str):
         raise HTTPException(status_code=404, detail="Vértice no encontrado")
     
     info = vertice.informacion.to_dict()
+    x = float(vertice.x) if vertice.x is not None else 0.0
+    y = float(vertice.y) if vertice.y is not None else 0.0
     return {
         "id": vertice_id,
         "informacion": info,
@@ -403,6 +570,9 @@ async def obtener_vertice(vertice_id: str):
         "tipo": vertice.tipo_cita,
         "capa": vertice.capa,
         "motor": vertice.motor,
+        "visible": vertice.visible,
+        "x": x,
+        "y": y,
         "adyacencias": vertice.get_adyacencias()
     }
 
@@ -445,7 +615,61 @@ async def listar_vertices(
     }
 
 
+# ==================== POSICIÓN ====================
+
+@router.post("/vertice/{vertice_id}/posicion")
+async def set_vertice_posicion(
+    vertice_id: str,
+    payload: Dict[str, Any],
+):
+    """
+    Establece la posición (x, y) del nodo en el canvas.
+    Body: { "x": number, "y": number }
+    Así Guardar Pro puede exportar las coordenadas donde el usuario dejó cada nodo.
+    """
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    vertice = grafo_service.grafo_actual.busca_vertice(vertice_id)
+    if not vertice:
+        raise HTTPException(status_code=404, detail="Vértice no encontrado")
+    try:
+        x = float(payload.get("x", 0))
+        y = float(payload.get("y", 0))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="x e y deben ser números")
+    grafo_service.grafo_actual.set_posicion(vertice_id, x, y)
+    return {"mensaje": "Posición actualizada", "vertice_id": vertice_id, "x": x, "y": y}
+
+
 # ==================== VISIBILIDAD ====================
+
+@router.post("/vertice/{vertice_id}/visible")
+async def set_vertice_visible(
+    vertice_id: str,
+    payload: Dict[str, Any],
+):
+    """
+    Establece si el nodo es visible u oculto.
+    Body: { "visible": true | false }
+    Retorna el grafo actualizado en formato vis.js.
+    """
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    vertice = grafo_service.grafo_actual.busca_vertice(vertice_id)
+    if not vertice:
+        raise HTTPException(status_code=404, detail="Vértice no encontrado")
+    visible = payload.get("visible", True)
+    if not isinstance(visible, bool):
+        visible = str(visible).lower() in ("true", "1", "yes")
+    grafo_service.grafo_actual.set_visible(vertice_id, visible)
+    grafo_actualizado = grafo_service.exportar_grafo(formato="visjs")
+    return {
+        "mensaje": "Nodo visible" if visible else "Nodo oculto",
+        "vertice_id": vertice_id,
+        "visible": visible,
+        "grafo": grafo_actualizado
+    }
+
 
 @router.post("/vertice/{vertice_id}/ocultar-dependientes")
 async def ocultar_dependientes(vertice_id: str):

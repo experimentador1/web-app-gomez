@@ -138,6 +138,10 @@ export interface VerticeDetalleResponse {
   tipo: string | null;
   capa: number;
   motor: string | null;
+  visible?: boolean;
+  /** Posición del nodo en el canvas (coordenadas x, y). */
+  x?: number;
+  y?: number;
   adyacencias: Array<[string, number]>;
 }
 

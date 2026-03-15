@@ -12,6 +12,7 @@ import {
   FileText,
   Eye,
   EyeOff,
+  Crosshair,
 } from "lucide-react";
 import { obtenerVertice } from "../services/api";
 
@@ -20,6 +21,9 @@ interface NodeDetailPanelProps {
   onClose: () => void;
   onShowAll?: () => void;
   onOcultarDependientes?: () => void;
+  onToggleVisible?: (nodeId: string, visible: boolean) => Promise<void>;
+  /** Posición x,y en vivo al mover el nodo (desde click hasta release). Si coincide con nodeId, se muestra en lugar de data.x/data.y */
+  posicionEnVivo?: { nodeId: string; x: number; y: number } | null;
 }
 
 export default function NodeDetailPanel({
@@ -27,6 +31,8 @@ export default function NodeDetailPanel({
   onClose,
   onShowAll,
   onOcultarDependientes,
+  onToggleVisible,
+  posicionEnVivo,
 }: NodeDetailPanelProps) {
   const { data, isLoading, error } = useQuery({
     queryKey: ["vertice", nodeId],
@@ -102,6 +108,49 @@ export default function NodeDetailPanel({
                   </span>
                 )}
             </div>
+
+            {/* Coordenadas en canvas: usa posicionEnVivo si es este nodo y está definida, sino data.x / data.y */}
+            {(() => {
+              // Estrechar tipo correctamente: live solo si nodeId coincide y no es null
+              const live = posicionEnVivo !== null && posicionEnVivo !== undefined && posicionEnVivo.nodeId === nodeId
+                ? posicionEnVivo
+                : null;
+              const x = live ? live.x : data.x;
+              const y = live ? live.y : data.y;
+              const hasVal = typeof x === "number" && typeof y === "number";
+              return (
+                <div className="bg-slate-700/40 rounded-xl p-3 border border-slate-600/50">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Crosshair className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm font-medium text-slate-300">
+                      Coordenadas en canvas
+                    </span>
+                    {live && (
+                      <span className="text-xs text-amber-400/90">(en vivo)</span>
+                    )}
+                  </div>
+                  <div className="flex items-baseline gap-4 font-mono text-sm">
+                    <span className="text-slate-400">
+                      x:{" "}
+                      <span className="text-amber-400 font-semibold">
+                        {hasVal ? (x as number).toFixed(2) : "—"}
+                      </span>
+                    </span>
+                    <span className="text-slate-400">
+                      y:{" "}
+                      <span className="text-amber-400 font-semibold">
+                        {hasVal ? (y as number).toFixed(2) : "—"}
+                      </span>
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1.5">
+                    {live
+                      ? "Actualizando al mover el nodo. Al soltar el mouse se guarda en el backend."
+                      : "Posición del nodo en el espacio del grafo. Arrastra el nodo para ver x, y en vivo."}
+                  </p>
+                </div>
+              );
+            })()}
 
             {/* Métricas */}
             <div className="grid grid-cols-2 gap-3">
@@ -208,8 +257,26 @@ export default function NodeDetailPanel({
             </div>
 
             {/* Botones de acción */}
-            {(onShowAll || onOcultarDependientes) && (
+            {(onShowAll || onOcultarDependientes || onToggleVisible) && (
               <div className="pt-2 border-t border-slate-700/50 space-y-2">
+                {onToggleVisible && (
+                  <button
+                    onClick={() => onToggleVisible(nodeId, !(data.visible !== false))}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-600/50 hover:bg-slate-600/70 text-slate-200 rounded-lg transition-colors font-medium text-sm"
+                  >
+                    {data.visible !== false ? (
+                      <>
+                        <EyeOff className="w-4 h-4" />
+                        Ocultar nodo
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-4 h-4" />
+                        Mostrar nodo
+                      </>
+                    )}
+                  </button>
+                )}
                 {onOcultarDependientes && (
                   <button
                     onClick={onOcultarDependientes}

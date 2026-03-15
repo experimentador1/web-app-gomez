@@ -7,6 +7,9 @@ from typing import Optional, Dict, List, Any, Set, Tuple
 from dataclasses import dataclass, field
 from datetime import datetime
 import json
+import csv
+import math
+import io
 
 
 @dataclass
@@ -260,6 +263,15 @@ class Grafo:
         if vertice:
             return vertice.visible
         return default
+    
+    def set_posicion(self, dato: str, x: float, y: float) -> bool:
+        """Establece la posición (x, y) de un vértice."""
+        vertice = self.busca_vertice(dato)
+        if vertice:
+            vertice.x = float(x)
+            vertice.y = float(y)
+            return True
+        return False
     
     def get_referentes(self, dato: str) -> List[str]:
         """
@@ -537,8 +549,8 @@ class Grafo:
                 {
                     "id": vid,
                     "informacion": vertice.informacion.to_dict(),
-                    "x": vertice.x,
-                    "y": vertice.y,
+                    "x": float(vertice.x) if vertice.x is not None else 0.0,
+                    "y": float(vertice.y) if vertice.y is not None else 0.0,
                     "grado_entrada": vertice.grado_entrada,
                     "grado_salida": vertice.grado_salida,
                     "tipo_cita": vertice.tipo_cita,
@@ -586,16 +598,16 @@ class Grafo:
                 except (ValueError, TypeError):
                     citation_val = 0
             
-            nodes.append({
+            x_val = float(vertice.x) if vertice.x is not None else 0.0
+            y_val = float(vertice.y) if vertice.y is not None else 0.0
+            node_data = {
                 "id": vid,
                 "label": self._truncate_label(info.title, 40),
-                "title": self._build_tooltip(info),
+                "title": self._build_tooltip(info, x_val, y_val),
                 "color": vertice.color or self._get_default_color(vertice),
                 "size": self._calculate_node_size(vertice),
                 "font": {"size": 12},
                 "shape": "dot" if vertice.capa == 0 else "diamond",
-                "x": vertice.x if vertice.x != 0 else None,
-                "y": vertice.y if vertice.y != 0 else None,
                 "hidden": not vertice.visible,
                 # Datos adicionales para el frontend
                 "data": {
@@ -606,7 +618,12 @@ class Grafo:
                     "tipo": vertice.tipo_cita,
                     "capa": vertice.capa
                 }
-            })
+            }
+            # Incluir x, y siempre para que el frontend pueda decidir: si hay al menos una
+            # posición no (0,0), no usar Force Atlas (Leer Pro con coordenadas guardadas)
+            node_data["x"] = x_val
+            node_data["y"] = y_val
+            nodes.append(node_data)
         
         edge_id = 0
         for origen, destino, peso in self.get_aristas():
@@ -630,9 +647,8 @@ class Grafo:
             return text
         return text[:max_len - 3] + "..."
     
-    def _build_tooltip(self, info: ArticuloInfo) -> str:
-        """Construye el tooltip en texto plano para vis.js."""
-        # Asegurar que los autores sean strings
+    def _build_tooltip(self, info: ArticuloInfo, x: Optional[float] = None, y: Optional[float] = None) -> str:
+        """Construye el tooltip en texto plano para vis.js (título, autores, año, DOI, coordenadas x,y)."""
         authors_list = []
         for a in (info.authors[:3] if info.authors else []):
             if isinstance(a, dict):
@@ -642,8 +658,6 @@ class Grafo:
         authors_str = ", ".join(authors_list) if authors_list else "No disponible"
         if len(info.authors) > 3:
             authors_str += f" (+{len(info.authors) - 3})"
-        
-        # Tooltip en texto plano (vis.js no interpreta HTML por defecto)
         lines = [
             info.title,
             f"Autores: {authors_str}",
@@ -651,7 +665,8 @@ class Grafo:
         ]
         if info.doi:
             lines.append(f"DOI: {info.doi}")
-        
+        if x is not None and y is not None:
+            lines.append(f"Coordenadas en canvas: x={float(x):.2f}, y={float(y):.2f}")
         return "\n".join(lines)
     
     def _get_default_color(self, vertice: Vertice) -> str:
@@ -1102,7 +1117,524 @@ class Grafo:
                             self.agregar_arista(articulo_id, autor_id, 1.0)
                             stats["conexiones_por_autor"] += 1
         
-        print(f"[merge_from_visjs] Stats: {stats}")
-        print(f"[merge_from_visjs] Autores encontrados: {list(autor_articulos.keys())[:5]}...")
         return stats
+
+    # ==================== EXPORT/IMPORT PRO Y LITE ====================
+
+    @staticmethod
+    def _export_norm_val(v: Any) -> Any:
+        """Normaliza valor para exportación (vacíos y NaN a None)."""
+        if v is None:
+            return None
+        if isinstance(v, float) and math.isnan(v):
+            return None
+        s = str(v).strip().lower()
+        if s in ("", "no disponible", "n/a", "na", "none", "null"):
+            return None
+        return v
+
+    @staticmethod
+    def _export_clean_info(info: Dict[str, Any]) -> Dict[str, Any]:
+        """Limpia info para export LITE (quita 'No disponible')."""
+        info = dict(info or {})
+        for k, v in list(info.items()):
+            nv = Grafo._export_norm_val(v)
+            info[k] = nv
+        if isinstance(info.get("authors"), str):
+            info["authors"] = [info["authors"]]
+        return info
+
+    @staticmethod
+    def _export_clean_info_lite(info: Dict[str, Any]) -> Dict[str, Any]:
+        """Limpia info para LITE: quita 'No disponible' y no incluye abstract."""
+        info = Grafo._export_clean_info(info)
+        info.pop("abstract", None)
+        return info
+
+    @staticmethod
+    def _export_canon_from(info: Dict[str, Any], nombre: str, capa: int) -> str:
+        """Genera ID canónico para export PRO."""
+        doi = Grafo._export_norm_val((info or {}).get("doi"))
+        pid = Grafo._export_norm_val((info or {}).get("paperId") or (info or {}).get("pid"))
+        title = Grafo._export_norm_val((info or {}).get("title") or (info or {}).get("titulo") or nombre)
+        c = 0 if capa in (None, "") else int(capa)
+        if doi:
+            doi_norm = str(doi).replace("https://doi.org/", "").replace("http://doi.org/", "").replace("doi:", "")
+            return f"layer:{c}|doi:{doi_norm}"
+        if pid:
+            return f"layer:{c}|pid:{pid}"
+        return f"layer:{c}|title:{title or nombre}"
+
+    def _iter_vertices_for_export(self, solo_visibles: bool = False) -> List[Tuple[str, float, float, Dict[str, Any]]]:
+        """Itera (id, x, y, info) para export; si solo_visibles, filtra por visible."""
+        out = []
+        for vid, v in self.vertices.items():
+            if solo_visibles and not v.visible:
+                continue
+            info = v.informacion.to_dict()
+            x = float(v.x) if v.x is not None else 0.0
+            y = float(v.y) if v.y is not None else 0.0
+            out.append((vid, x, y, info))
+        return out
+
+    def to_pro_json(self) -> Dict[str, Any]:
+        """
+        Exporta grafo en formato JSON PRO: todo el contenido del grafo
+        (abstract, autores, citas, referencias, venue, doi, etc.) y coordenadas x, y
+        de cada nodo para conservar la posición que dejó el usuario.
+        """
+        nodes, edges = [], []
+        for nombre, x, y, info in self._iter_vertices_for_export(solo_visibles=False):
+            vertice = self.busca_vertice(nombre)
+            capa = getattr(vertice, "capa", 0) or 0
+            color = self.get_color(nombre)
+            visible = self.get_visible(nombre, True)
+            size = getattr(vertice, "valor", None) or info.get("citationCount") or info.get("citation_count")
+            motor = getattr(vertice, "motor", None)
+            canon_id = self._export_canon_from(info, nombre, capa)
+            # info ya incluye title, authors, year, venue, doi, abstract, citations, references, etc. (ArticuloInfo.to_dict)
+            node = {
+                "id": str(nombre).strip(),
+                "x": x, "y": y,
+                "capa": capa, "color": color,
+                "size": size, "visible": visible,
+                "motor": motor, "canon_id": canon_id,
+                "grado_entrada": vertice.grado_entrada,
+                "grado_salida": vertice.grado_salida,
+                "info": info,
+            }
+            nodes.append(node)
+        for origen, destino, peso in self.get_aristas():
+            if not origen or not destino or origen == destino:
+                continue
+            w = peso if peso is not None else 1.0
+            if isinstance(w, float) and math.isnan(w):
+                w = 1.0
+            edges.append({
+                "source": str(origen).strip(),
+                "target": str(destino).strip(),
+                "weight": float(w),
+                "directed": 1,
+            })
+        return {"nodes": nodes, "edges": edges}
+
+    PRO_CSV_FIELDNAMES = [
+        "row_type", "id", "x", "y", "capa", "color", "size", "visible",
+        "categoria", "tipo_cita", "title", "year", "venue", "doi", "citationCount",
+        "authors_json", "topics_json", "motor", "canon_id", "info_json",
+        "source", "target", "weight", "directed",
+    ]
+
+    def to_pro_csv_rows(self) -> List[Dict[str, Any]]:
+        """
+        Exporta grafo como filas CSV PRO: todo el contenido (abstract, autores, citas, etc.)
+        y coordenadas x, y por nodo para conservar la posición. Jerarquía Pro = todos los elementos del grafo.
+        """
+        rows = []
+        for nombre, x, y, info in self._iter_vertices_for_export(solo_visibles=False):
+            v = self.busca_vertice(nombre)
+            capa = getattr(v, "capa", 0) or 0
+            color = self.get_color(nombre)
+            visible = self.get_visible(nombre, True)
+            size = getattr(v, "valor", None) or info.get("citationCount") or info.get("citation_count")
+            motor = getattr(v, "motor", None)
+            canon_id = self._export_canon_from(info, nombre, capa)
+            authors_json = json.dumps(info.get("authors") or [], ensure_ascii=False)
+            topics_json = json.dumps(info.get("topics") or [], ensure_ascii=False)
+            row = {k: "" for k in self.PRO_CSV_FIELDNAMES}
+            row.update({
+                "row_type": "node",
+                "id": nombre, "x": self._export_norm_val(x) or "", "y": self._export_norm_val(y) or "",
+                "capa": capa, "color": self._export_norm_val(color) or "",
+                "size": self._export_norm_val(size) or "",
+                "visible": 1 if visible else 0,
+                "categoria": self._export_norm_val(info.get("categoria")) or "",
+                "tipo_cita": self._export_norm_val(v.tipo_cita) if v else "",
+                "title": self._export_norm_val(info.get("title")) or "",
+                "year": self._export_norm_val(info.get("year")) or "",
+                "venue": self._export_norm_val(info.get("venue")) or "",
+                "doi": self._export_norm_val(info.get("doi")) or "",
+                "citationCount": self._export_norm_val(info.get("citationCount") or info.get("citation_count")) or "",
+                "authors_json": authors_json,
+                "topics_json": topics_json,
+                "motor": motor or "",
+                "canon_id": canon_id or "",
+                "info_json": json.dumps(info, ensure_ascii=False),
+            })
+            rows.append(row)
+        for origen, destino, peso in self.get_aristas():
+            if not origen or not destino or origen == destino:
+                continue
+            w = peso if peso is not None else 1.0
+            if isinstance(w, float) and math.isnan(w):
+                w = 1.0
+            row = {k: "" for k in self.PRO_CSV_FIELDNAMES}
+            row.update({
+                "row_type": "edge",
+                "source": origen, "target": destino,
+                "weight": w, "directed": 1,
+            })
+            rows.append(row)
+        return rows
+
+    def to_lite_json(self) -> Dict[str, Any]:
+        """Exporta grafo en formato JSON LITE: info mínima, sin posición (x,y) ni abstract."""
+        nodes, edges = [], []
+        for nombre, x, y, info in self._iter_vertices_for_export(solo_visibles=False):
+            v = self.busca_vertice(nombre)
+            capa = getattr(v, "capa", 0) or 0
+            color = self.get_color(nombre)
+            # Lite: no guardar posición (x, y) ni abstract; solo info mínima
+            nodes.append({
+                "id": str(nombre).strip(),
+                "capa": int(capa) if str(capa).isdigit() else 0,
+                **({"color": color} if color else {}),
+                "info": self._export_clean_info_lite(info),
+            })
+        for origen, destino, peso in self.get_aristas():
+            if not origen or not destino or origen == destino:
+                continue
+            w = float(peso if peso is not None else 1)
+            if isinstance(w, float) and math.isnan(w):
+                w = 1.0
+            edges.append({
+                "source": str(origen).strip(),
+                "target": str(destino).strip(),
+                "weight": w,
+                "directed": 1,
+            })
+        return {"nodes": nodes, "edges": edges}
+
+    LITE_CSV_FIELDNAMES = ["row_type", "id", "x", "y", "capa", "color", "info_json",
+                           "source", "target", "weight", "directed"]
+
+    def to_lite_csv_rows(self) -> List[Dict[str, Any]]:
+        """Exporta grafo como filas CSV LITE. No guarda posición (x,y) ni abstract."""
+        rows = []
+        for nombre, _x, _y, info in self._iter_vertices_for_export(solo_visibles=False):
+            v = self.busca_vertice(nombre)
+            capa = getattr(v, "capa", 0) or 0
+            color = self.get_color(nombre)
+            row = {k: "" for k in self.LITE_CSV_FIELDNAMES}
+            row.update({
+                "row_type": "node",
+                "id": str(nombre).strip(),
+                "x": 0, "y": 0,
+                "capa": int(capa) if str(capa).isdigit() else 0,
+                "color": color or "",
+                "info_json": json.dumps(self._export_clean_info_lite(info), ensure_ascii=False),
+            })
+            rows.append(row)
+        for origen, destino, peso in self.get_aristas():
+            if not origen or not destino or origen == destino:
+                continue
+            w = float(peso if peso is not None else 1)
+            if isinstance(w, float) and math.isnan(w):
+                w = 1.0
+            row = {k: "" for k in self.LITE_CSV_FIELDNAMES}
+            row.update({
+                "row_type": "edge",
+                "source": str(origen).strip(),
+                "target": str(destino).strip(),
+                "weight": w,
+                "directed": 1,
+            })
+            rows.append(row)
+        return rows
+
+    def to_subgrafo_visible_pro_json(self) -> Dict[str, Any]:
+        """Exporta solo nodos visibles en formato PRO JSON."""
+        nodes, edges = [], []
+        visibles = set()
+        for nombre, x, y, info in self._iter_vertices_for_export(solo_visibles=True):
+            visibles.add(nombre)
+            v = self.busca_vertice(nombre)
+            capa = getattr(v, "capa", 0) or 0
+            color = self.get_color(nombre)
+            nodes.append({
+                "id": str(nombre).strip(),
+                "x": x, "y": y,
+                "capa": capa, "color": color,
+                "info": info,
+            })
+        for origen, destino, peso in self.get_aristas():
+            if origen not in visibles or destino not in visibles or origen == destino:
+                continue
+            w = float(peso if peso is not None else 1)
+            if isinstance(w, float) and math.isnan(w):
+                w = 1.0
+            edges.append({
+                "source": str(origen).strip(),
+                "target": str(destino).strip(),
+                "weight": w,
+                "directed": 1,
+            })
+        return {"nodes": nodes, "edges": edges}
+
+    def to_subgrafo_visible_pro_csv_rows(self) -> List[Dict[str, Any]]:
+        """Exporta solo nodos visibles en filas CSV PRO."""
+        visibles = set()
+        for nombre, _, _, _ in self._iter_vertices_for_export(solo_visibles=True):
+            visibles.add(nombre)
+        rows = []
+        for nombre, x, y, info in self._iter_vertices_for_export(solo_visibles=True):
+            v = self.busca_vertice(nombre)
+            capa = getattr(v, "capa", 0) or 0
+            color = self.get_color(nombre)
+            row = {k: "" for k in self.PRO_CSV_FIELDNAMES}
+            row.update({
+                "row_type": "node",
+                "id": nombre, "x": x, "y": y,
+                "capa": capa, "color": color or "",
+                "info_json": json.dumps(info, ensure_ascii=False),
+            })
+            rows.append(row)
+        for origen, destino, peso in self.get_aristas():
+            if origen not in visibles or destino not in visibles or origen == destino:
+                continue
+            w = float(peso if peso is not None else 1)
+            if isinstance(w, float) and math.isnan(w):
+                w = 1.0
+            row = {k: "" for k in self.PRO_CSV_FIELDNAMES}
+            row.update({
+                "row_type": "edge",
+                "source": origen, "target": destino,
+                "weight": w, "directed": 1,
+            })
+            rows.append(row)
+        return rows
+
+    def to_subgrafo_visible_lite_json(self) -> Dict[str, Any]:
+        """Exporta solo nodos visibles en formato LITE JSON. Sin posición ni abstract."""
+        nodes, edges = [], []
+        for nombre, _x, _y, info in self._iter_vertices_for_export(solo_visibles=True):
+            v = self.busca_vertice(nombre)
+            capa = getattr(v, "capa", 0) or 0
+            color = self.get_color(nombre)
+            nodes.append({
+                "id": str(nombre).strip(),
+                "capa": int(capa) if str(capa).isdigit() else 0,
+                **({"color": color} if color else {}),
+                "info": self._export_clean_info_lite(info),
+            })
+        visibles = {t[0] for t in self._iter_vertices_for_export(solo_visibles=True)}
+        for origen, destino, peso in self.get_aristas():
+            if origen not in visibles or destino not in visibles or origen == destino:
+                continue
+            w = float(peso if peso is not None else 1)
+            if isinstance(w, float) and math.isnan(w):
+                w = 1.0
+            edges.append({
+                "source": str(origen).strip(),
+                "target": str(destino).strip(),
+                "weight": w,
+                "directed": 1,
+            })
+        return {"nodes": nodes, "edges": edges}
+
+    def to_subgrafo_visible_lite_csv_rows(self) -> List[Dict[str, Any]]:
+        """Exporta solo nodos visibles en filas CSV LITE. Sin posición ni abstract."""
+        rows = []
+        visibles = set()
+        for nombre, _x, _y, info in self._iter_vertices_for_export(solo_visibles=True):
+            visibles.add(nombre)
+            v = self.busca_vertice(nombre)
+            capa = getattr(v, "capa", 0) or 0
+            color = self.get_color(nombre)
+            row = {k: "" for k in self.LITE_CSV_FIELDNAMES}
+            row.update({
+                "row_type": "node",
+                "id": str(nombre).strip(),
+                "x": 0, "y": 0,
+                "capa": int(capa) if str(capa).isdigit() else 0,
+                "color": color or "",
+                "info_json": json.dumps(self._export_clean_info_lite(info), ensure_ascii=False),
+            })
+            rows.append(row)
+        for origen, destino, peso in self.get_aristas():
+            if origen not in visibles or destino not in visibles or origen == destino:
+                continue
+            w = float(peso if peso is not None else 1)
+            if isinstance(w, float) and math.isnan(w):
+                w = 1.0
+            row = {k: "" for k in self.LITE_CSV_FIELDNAMES}
+            row.update({
+                "row_type": "edge",
+                "source": str(origen).strip(),
+                "target": str(destino).strip(),
+                "weight": w,
+                "directed": 1,
+            })
+            rows.append(row)
+        return rows
+
+    @staticmethod
+    def _parse_visible(val: Any) -> bool:
+        """Interpreta valor visible (JSON/CSV): True, 1, '1' -> True; False, 0, '0' -> False."""
+        if val is None:
+            return True
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, int):
+            return val != 0
+        s = str(val).strip().lower()
+        return s not in ("0", "false", "no", "")
+
+    @classmethod
+    def from_pro_json(cls, data: Dict[str, Any], solo_visibles: bool = False) -> "Grafo":
+        """
+        Importa un grafo desde JSON PRO (nodes + edges).
+        Si solo_visibles=True (import Lite), solo se cargan nodos con visible=true.
+        """
+        g = cls()
+        nodes = []
+        edges = []
+        if isinstance(data, dict):
+            nodes = list(data.get("nodes") or [])
+            edges = list(data.get("edges") or [])
+            if not nodes and isinstance(data.get("rows"), list):
+                for r in data["rows"]:
+                    rt = (r.get("row_type") or "").strip().lower()
+                    (nodes if rt in ("", "node") else edges).append(r)
+        elif isinstance(data, list):
+            for r in data:
+                if not isinstance(r, dict):
+                    continue
+                rt = (r.get("row_type") or "").strip().lower()
+                (nodes if rt in ("", "node") else edges).append(r)
+        for r in nodes:
+            if solo_visibles and not cls._parse_visible(r.get("visible", True)):
+                continue
+            nid = (r.get("id") or "").strip()
+            if not nid:
+                continue
+            nombre = " ".join(nid.split())
+            # Leer x, y: en raíz del nodo (Pro) o dentro de "data" (vis.js)
+            raw_x = r.get("x")
+            raw_y = r.get("y")
+            if raw_x is None and raw_y is None and isinstance(r.get("data"), dict):
+                data = r["data"]
+                raw_x = data.get("x")
+                raw_y = data.get("y")
+            try:
+                x = float(raw_x) if raw_x is not None else 0.0
+            except (TypeError, ValueError):
+                x = 0.0
+            try:
+                y = float(raw_y) if raw_y is not None else 0.0
+            except (TypeError, ValueError):
+                y = 0.0
+            try:
+                capa = int(r.get("capa") if r.get("capa") is not None else 0)
+            except (TypeError, ValueError):
+                capa = 0
+            info = {}
+            if isinstance(r.get("info"), dict):
+                info = dict(r["info"])
+            elif r.get("info_json"):
+                try:
+                    info = json.loads(r["info_json"])
+                except Exception:
+                    info = {}
+            else:
+                # Formato vis.js: construir info desde "data", "label", "title"
+                data = r.get("data") if isinstance(r.get("data"), dict) else {}
+                info = {
+                    "title": (data.get("title") or r.get("label") or r.get("title") or nid),
+                    "authors": data.get("authors") or [],
+                    "year": data.get("year"),
+                    "citationCount": data.get("citationCount") or data.get("citation_count") or 0,
+                }
+            info["capa"] = capa
+            g.agregar_o_actualizar_vertice(nombre, info)
+            v = g.busca_vertice(nombre)
+            if v:
+                v.x, v.y = x, y
+                v.capa = capa
+            col = r.get("color")
+            if col:
+                g.set_color(nombre, col)
+            g.set_posicion(nombre, x, y)
+            v = g.busca_vertice(nombre)
+            if v:
+                # Pro usa "visible"; vis.js usa "hidden" (visible = not hidden)
+                visible_val = r.get("visible") if "visible" in r else (not bool(r.get("hidden", False)))
+                v.visible = cls._parse_visible(visible_val)
+        for e in edges:
+            src = (e.get("source") or e.get("from") or "").strip()
+            dst = (e.get("target") or e.get("to") or "").strip()
+            if not src or not dst or src == dst:
+                continue
+            src = " ".join(src.split())
+            dst = " ".join(dst.split())
+            try:
+                peso = float(e.get("weight") if e.get("weight") is not None else 1)
+            except (TypeError, ValueError):
+                peso = 1.0
+            if g.existe_vertice(src) and g.existe_vertice(dst):
+                g.agregar_arista(src, dst, peso)
+        return g
+
+    @classmethod
+    def from_pro_csv(cls, csv_content: str, solo_visibles: bool = False) -> "Grafo":
+        """
+        Importa un grafo desde contenido CSV PRO (row_type=node|edge).
+        Si solo_visibles=True (import Lite), solo se cargan nodos con visible=1/true.
+        """
+        g = cls()
+        buf = io.StringIO(csv_content.strip())
+        reader = csv.DictReader(buf)
+        rows = list(reader)
+        for r in rows:
+            if (r.get("row_type") or "").strip().lower() != "node":
+                continue
+            if solo_visibles and not cls._parse_visible(r.get("visible", "1")):
+                continue
+            nombre = (r.get("id") or "").strip()
+            if not nombre:
+                continue
+            nombre = " ".join(nombre.split())
+            try:
+                x = float(r.get("x") or 0)
+                y = float(r.get("y") or 0)
+            except (TypeError, ValueError):
+                x, y = 0.0, 0.0
+            try:
+                capa = int(r.get("capa") or 0)
+            except (TypeError, ValueError):
+                capa = 0
+            info = {}
+            if r.get("info_json"):
+                try:
+                    info = json.loads(r["info_json"])
+                except Exception:
+                    info = {}
+            info["capa"] = capa
+            g.agregar_o_actualizar_vertice(nombre, info)
+            v = g.busca_vertice(nombre)
+            if v:
+                v.x, v.y = x, y
+                v.capa = capa
+            if r.get("color"):
+                g.set_color(nombre, r["color"])
+            g.set_posicion(nombre, x, y)
+            v = g.busca_vertice(nombre)
+            if v:
+                v.visible = cls._parse_visible(r.get("visible", "1"))
+        for r in rows:
+            if (r.get("row_type") or "").strip().lower() != "edge":
+                continue
+            src = (r.get("source") or r.get("from") or "").strip()
+            dst = (r.get("target") or r.get("to") or "").strip()
+            if not src or not dst or src == dst:
+                continue
+            src = " ".join(src.split())
+            dst = " ".join(dst.split())
+            try:
+                peso = float(r.get("weight") or 1)
+            except (TypeError, ValueError):
+                peso = 1.0
+            if g.existe_vertice(src) and g.existe_vertice(dst):
+                g.agregar_arista(src, dst, peso)
+        return g
 

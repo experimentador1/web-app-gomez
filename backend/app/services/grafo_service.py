@@ -348,6 +348,7 @@ class GrafoService:
     ) -> Dict[str, Any]:
         """
         Exporta el grafo en el formato especificado.
+        Formatos: visjs, json, pro_json, lite_json, subgrafo_visible_pro_json, subgrafo_visible_lite_json
         """
         g = grafo or self.grafo_actual
         if not g:
@@ -357,8 +358,64 @@ class GrafoService:
             return g.to_visjs()
         elif formato == "json":
             return g.to_dict()
+        elif formato == "pro_json":
+            return g.to_pro_json()
+        elif formato == "lite_json":
+            return g.to_lite_json()
+        elif formato == "subgrafo_visible_pro_json":
+            return g.to_subgrafo_visible_pro_json()
+        elif formato == "subgrafo_visible_lite_json":
+            return g.to_subgrafo_visible_lite_json()
         else:
             return g.to_dict()
+
+    def exportar_grafo_csv(
+        self,
+        grafo: Optional[Grafo] = None,
+        formato: str = "pro"
+    ) -> tuple:
+        """
+        Exporta el grafo como filas CSV. Retorna (fieldnames, rows).
+        formato: pro, lite, subgrafo_visible_pro, subgrafo_visible_lite
+        """
+        g = grafo or self.grafo_actual
+        if not g:
+            return ([], [])
+        if formato == "pro":
+            return (Grafo.PRO_CSV_FIELDNAMES, g.to_pro_csv_rows())
+        if formato == "lite":
+            return (Grafo.LITE_CSV_FIELDNAMES, g.to_lite_csv_rows())
+        if formato == "subgrafo_visible_pro":
+            return (Grafo.PRO_CSV_FIELDNAMES, g.to_subgrafo_visible_pro_csv_rows())
+        if formato == "subgrafo_visible_lite":
+            return (Grafo.LITE_CSV_FIELDNAMES, g.to_subgrafo_visible_lite_csv_rows())
+        return (Grafo.PRO_CSV_FIELDNAMES, g.to_pro_csv_rows())
+
+    def importar_grafo_pro_json(self, data: Dict[str, Any], merge: bool = False, tipo: str = "pro") -> Grafo:
+        """
+        Importa desde JSON. tipo: "lite" (solo nodos visibles) o "pro" (todos los nodos).
+        Si merge=True fusiona con grafo actual; si no, reemplaza.
+        """
+        solo_visibles = (tipo or "pro").lower() == "lite"
+        g_nuevo = Grafo.from_pro_json(data, solo_visibles=solo_visibles)
+        if merge and self.grafo_actual:
+            self.grafo_actual.merge(g_nuevo)
+            return self.grafo_actual
+        self.grafo_actual = g_nuevo
+        return self.grafo_actual
+
+    def importar_grafo_pro_csv(self, csv_content: str, merge: bool = False, tipo: str = "pro") -> Grafo:
+        """
+        Importa desde CSV. tipo: "lite" (solo nodos visibles) o "pro" (todos los nodos).
+        Si merge=True fusiona con grafo actual; si no, reemplaza.
+        """
+        solo_visibles = (tipo or "pro").lower() == "lite"
+        g_nuevo = Grafo.from_pro_csv(csv_content, solo_visibles=solo_visibles)
+        if merge and self.grafo_actual:
+            self.grafo_actual.merge(g_nuevo)
+            return self.grafo_actual
+        self.grafo_actual = g_nuevo
+        return self.grafo_actual
     
     def limpiar_grafo(self):
         """Limpia el grafo actual."""
