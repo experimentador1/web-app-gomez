@@ -14,6 +14,7 @@ import {
   Share2,
   Compass,
   Layers,
+  Shuffle,
 } from "lucide-react";
 
 interface ToolbarProps {
@@ -29,6 +30,7 @@ interface ToolbarProps {
   onToggleLabels: () => void;
   onApplyColors: () => void;
   onShowAll: () => void;
+  onOrganizarTodo: () => void;
   onUndo: () => void;
   onClear: () => void;
   showLabels: boolean;
@@ -47,6 +49,7 @@ export default function Toolbar({
   onCitasAB,
   onToggleLabels,
   onShowAll,
+  onOrganizarTodo,
   onUndo,
   onClear,
   showLabels,
@@ -161,6 +164,15 @@ export default function Toolbar({
             >
               <Layers className="w-4 h-4" />
               <span className="text-sm font-medium">Mostrar todo</span>
+            </button>
+            <button
+              onClick={onOrganizarTodo}
+              disabled={!hasData}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border border-amber-500/40 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+              title="Aplicar Force Atlas para reorganizar el grafo"
+            >
+              <Shuffle className="w-4 h-4" />
+              <span className="text-sm font-medium">Organizar todo</span>
             </button>
           </div>
         </div>

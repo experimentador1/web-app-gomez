@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-query";
 import { BookOpen, Download, Save, FolderOpen, RefreshCw, Users } from "lucide-react";
 
-import GraphVisualization from "./components/GraphVisualization";
+import GraphVisualization, { type GraphVisualizationHandle } from "./components/GraphVisualization";
 import SearchPanel from "./components/SearchPanel";
 import NodeDetailPanel from "./components/NodeDetailPanel";
 import StatsPanel from "./components/StatsPanel";
@@ -71,6 +71,7 @@ function Dashboard() {
   /** Posición x,y en vivo del nodo que se está moviendo (desde click hasta release). Para mostrar en pantalla. */
   const [posicionEnVivo, setPosicionEnVivo] = useState<{ nodeId: string; x: number; y: number } | null>(null);
   const grafoHistoryRef = useRef<VisJSData[]>([]);
+  const graphRef = useRef<GraphVisualizationHandle>(null);
   const MAX_HISTORY = 30;
 
   const hasData = grafoData.nodes.length > 0;
@@ -382,8 +383,15 @@ function Dashboard() {
         }
       } catch (error) {
         console.error("Error al importar grafo:", error);
+        // Extraer detalle del error del backend (Axios expone response.data.detail)
+        const axiosDetail =
+          (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
         setSearchError(
-          error instanceof Error ? error.message : "Error al importar el archivo"
+          axiosDetail
+            ? `Error al importar: ${axiosDetail}`
+            : error instanceof Error
+            ? error.message
+            : "Error al importar el archivo"
         );
       } finally {
         setIsSearching(false);
@@ -650,6 +658,7 @@ function Dashboard() {
               onToggleLabels={handleToggleLabels}
               onApplyColors={() => {}}
               onShowAll={handleShowAll}
+              onOrganizarTodo={() => graphRef.current?.runForceAtlas()}
               onUndo={handleUndo}
               onClear={handleClearGraph}
               showLabels={showLabels}
@@ -675,16 +684,14 @@ function Dashboard() {
                 </div>
               ) : (
                 <GraphVisualization
+                  ref={graphRef}
                   data={grafoData}
                   onNodeClick={handleNodeClick}
                   onPositionLive={(nodeId, x, y) => setPosicionEnVivo({ nodeId, x, y })}
                   onNodePositionChange={async (nodeId, x, y) => {
                     try {
                       await setVerticePosicion(nodeId, x, y);
-                      // Actualizar posición final en el indicador de pantalla
                       setPosicionEnVivo({ nodeId, x, y });
-                      // Invalidar solo el query del vértice para que el panel muestre x,y actualizado
-                      // NO recargar grafoData completo (eso resetearía posiciones en vis.js)
                       localQueryClient.invalidateQueries({ queryKey: ["vertice", nodeId] });
                     } catch {
                       /* fallo silencioso si el backend no está disponible */

@@ -1,10 +1,11 @@
 // components/GraphVisualization.tsx
 // Componente principal de visualización del grafo con vis.js
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from "react";
 import { Network, Options, Data } from "vis-network/standalone";
 import { DataSet } from "vis-data/standalone";
 import type { VisJSData, VisNode, VisEdge } from "../types/grafo";
+import { setPosicionesBatch } from "../services/api";
 
 interface GraphVisualizationProps {
   data: VisJSData;
@@ -99,7 +100,13 @@ const defaultOptions: Options = {
   },
 };
 
-export default function GraphVisualization({
+export interface GraphVisualizationHandle {
+  /** Activa Force Atlas y reorganiza todos los nodos */
+  runForceAtlas: () => void;
+}
+
+const GraphVisualization = forwardRef<GraphVisualizationHandle, GraphVisualizationProps>(
+function GraphVisualization({
   data,
   onNodeClick,
   onNodeDoubleClick,
@@ -107,7 +114,7 @@ export default function GraphVisualization({
   onPositionLive,
   height = "600px",
   className = "",
-}: GraphVisualizationProps) {
+}: GraphVisualizationProps, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const networkRef = useRef<Network | null>(null);
   const nodesRef = useRef<DataSet<VisNode> | null>(null);
@@ -119,12 +126,33 @@ export default function GraphVisualization({
   onPositionLiveRef.current = onPositionLive;
   // Ref que almacena el nodo siendo arrastrado actualmente
   const draggingNodeRef = useRef<string | null>(null);
+  // Última posición canvas conocida del mouse durante el drag (via DOMtoCanvas).
+  // Es la misma fuente que muestra el HUD, la usamos para guardar x,y al soltar.
+  const lastDragPosRef = useRef<{ nodeId: string; x: number; y: number } | null>(null);
   // Refs directos al DOM del overlay HUD de coordenadas (sin pasar por React state = sin lag)
   const hudOverlayRef = useRef<HTMLDivElement | null>(null);
   const hudXRef = useRef<HTMLSpanElement | null>(null);
   const hudYRef = useRef<HTMLSpanElement | null>(null);
   const [isStabilizing, setIsStabilizing] = useState(true);
   const [stabilizationProgress, setStabilizationProgress] = useState(0);
+
+  // Exponer runForceAtlas() al componente padre vía ref
+  useImperativeHandle(ref, () => ({
+    runForceAtlas() {
+      if (!networkRef.current) return;
+      setIsStabilizing(true);
+      setStabilizationProgress(0);
+      networkRef.current.setOptions({
+        physics: {
+          enabled: true,
+          solver: "forceAtlas2Based",
+          forceAtlas2Based: { gravitationalConstant: -50, centralGravity: 0.01, springLength: 100, springConstant: 0.08 },
+          stabilization: { iterations: 300, updateInterval: 25 },
+        },
+      });
+      networkRef.current.stabilize(300);
+    },
+  }));
 
   /**
    * Lee la posición del nodo desde vis.js y:
@@ -194,24 +222,34 @@ export default function GraphVisualization({
       setStabilizationProgress(100);
       // Desactivar física para que los nodos se queden donde el usuario los suelte
       networkRef.current?.setOptions({ physics: { enabled: false } });
-      // Actualizar el tooltip (title) de cada nodo con la posición real asignada por Force Atlas,
-      // para que al hacer hover se muestren las coordenadas correctas (no 0,0 del backend)
+      // Recoger posiciones finales de Force Atlas y sincronizar con el backend
       if (nodesRef.current && networkRef.current) {
         const allIds = nodesRef.current.getIds() as string[];
         const positions = networkRef.current.getPositions(allIds);
         const updates: Array<Partial<VisNode> & { id: string; title: string }> = [];
+        const batchPosiciones: Record<string, { x: number; y: number }> = {};
         for (const id of allIds) {
           const pos = positions[id];
           if (!pos) continue;
+          // Actualizar tooltip con coordenadas reales de Force Atlas
           const node = nodesRef.current.get(id) as (VisNode & { title?: string }) | undefined;
-          if (!node) continue;
-          const base = (node.title ?? "").replace(/\nCoordenadas en canvas:.*$/s, "").trimEnd();
-          updates.push({
-            id,
-            title: base + `\nCoordenadas en canvas: x=${pos.x.toFixed(2)}, y=${pos.y.toFixed(2)}`,
-          } as Partial<VisNode> & { id: string; title: string });
+          if (node) {
+            const base = (node.title ?? "").replace(/\nCoordenadas en canvas:.*$/s, "").trimEnd();
+            updates.push({
+              id,
+              title: base + `\nCoordenadas en canvas: x=${pos.x.toFixed(2)}, y=${pos.y.toFixed(2)}`,
+            } as Partial<VisNode> & { id: string; title: string });
+          }
+          // Acumular para el batch al backend
+          batchPosiciones[id] = { x: pos.x, y: pos.y };
         }
         if (updates.length > 0) nodesRef.current.update(updates);
+        // Enviar todas las posiciones de Force Atlas al backend en una sola llamada
+        if (Object.keys(batchPosiciones).length > 0) {
+          setPosicionesBatch(batchPosiciones).catch(() => {
+            // Fallo silencioso: el backend podría no estar disponible
+          });
+        }
       }
     });
 
@@ -230,30 +268,43 @@ export default function GraphVisualization({
       updatePositionDisplay(params.nodes[0]);
     });
 
-    // dragEnd: leer posición final exacta desde vis.js, actualizar tooltip y guardar en backend
+    // dragEnd: usar la última posición registrada por mousemove (DOMtoCanvas) como fuente
+    // principal — es exactamente lo que muestra el HUD y es confiable.
+    // getPositions() de vis.js puede devolver 0,0 cuando physics está desactivado en ciertos builds.
     networkRef.current.on("dragEnd", (params: { nodes: string[] }) => {
       const nodeId = draggingNodeRef.current ?? params.nodes[0];
       draggingNodeRef.current = null;
       if (hudOverlayRef.current) hudOverlayRef.current.style.display = "none";
       if (!nodeId || !networkRef.current || !nodesRef.current) return;
 
-      const pos = networkRef.current.getPositions([nodeId]);
-      if (pos?.[nodeId]) {
-        const x = pos[nodeId].x;
-        const y = pos[nodeId].y;
-        if (hudXRef.current) hudXRef.current.textContent = x.toFixed(2);
-        if (hudYRef.current) hudYRef.current.textContent = y.toFixed(2);
-        onPositionLiveRef.current?.(nodeId, x, y);
-        // Actualizar tooltip del nodo con coordenadas finales
-        const node = nodesRef.current.get(nodeId) as (VisNode & { title?: string }) | undefined;
-        const baseTitle = node?.title ?? "";
-        const coordsLine = `\nCoordenadas en canvas: x=${x.toFixed(2)}, y=${y.toFixed(2)}`;
-        const newTitle = baseTitle.replace(/\nCoordenadas en canvas:.*$/s, "").trimEnd() + coordsLine;
-        nodesRef.current.update({
-          id: nodeId, x, y, title: newTitle,
-        } as Partial<VisNode> & { id: string; title: string });
-        onNodePositionChangeRef.current?.(nodeId, x, y);
+      // Obtener posición: primero getPositions() si es no-cero; si no, usar lastDragPosRef (DOMtoCanvas)
+      let x: number | null = null;
+      let y: number | null = null;
+      const visPos = networkRef.current.getPositions([nodeId]);
+      if (visPos?.[nodeId] && (visPos[nodeId].x !== 0 || visPos[nodeId].y !== 0)) {
+        x = visPos[nodeId].x;
+        y = visPos[nodeId].y;
+      } else if (lastDragPosRef.current?.nodeId === nodeId) {
+        // Fallback: usar la posición del mouse convertida al canvas (misma que el HUD)
+        x = lastDragPosRef.current.x;
+        y = lastDragPosRef.current.y;
       }
+      lastDragPosRef.current = null;
+
+      if (x === null || y === null) return;
+
+      if (hudXRef.current) hudXRef.current.textContent = x.toFixed(2);
+      if (hudYRef.current) hudYRef.current.textContent = y.toFixed(2);
+      onPositionLiveRef.current?.(nodeId, x, y);
+      // Actualizar tooltip del nodo con coordenadas finales
+      const node = nodesRef.current.get(nodeId) as (VisNode & { title?: string }) | undefined;
+      const baseTitle = node?.title ?? "";
+      const coordsLine = `\nCoordenadas en canvas: x=${x.toFixed(2)}, y=${y.toFixed(2)}`;
+      const newTitle = baseTitle.replace(/\nCoordenadas en canvas:.*$/s, "").trimEnd() + coordsLine;
+      nodesRef.current.update({
+        id: nodeId, x, y, title: newTitle,
+      } as Partial<VisNode> & { id: string; title: string });
+      onNodePositionChangeRef.current?.(nodeId, x, y);
     });
 
     // ── Tracking de mouse via DOM nativo ──────────────────────────────────────────
@@ -270,6 +321,8 @@ export default function GraphVisualization({
       // Convertir coordenadas DOM → coordenadas del canvas de vis.js
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const canvasPos = (networkRef.current as any).DOMtoCanvas(domPos) as { x: number; y: number };
+      // Guardar última posición conocida del drag (usada en dragEnd como fuente de verdad)
+      lastDragPosRef.current = { nodeId, x: canvasPos.x, y: canvasPos.y };
       // Actualizar HUD directamente en el DOM (sin React state = sin lag)
       if (hudXRef.current) hudXRef.current.textContent = canvasPos.x.toFixed(2);
       if (hudYRef.current) hudYRef.current.textContent = canvasPos.y.toFixed(2);
@@ -309,8 +362,13 @@ export default function GraphVisualization({
     nodesRef.current.add(data.nodes);
     edgesRef.current.add(data.edges);
 
-    // Re-estabilizar solo si hay física (sin posiciones guardadas)
+    // Re-estabilizar con Force Atlas si no hay posiciones guardadas.
+    // Es necesario re-activar physics explícitamente porque puede haber quedado desactivado
+    // tras la sesión anterior (stabilizationIterationsDone lo desactiva).
     if (!hasPositions && networkRef.current) {
+      networkRef.current.setOptions({
+        physics: { ...defaultOptions.physics, enabled: true },
+      });
       networkRef.current.stabilize();
     }
   }, [data]);
@@ -500,5 +558,9 @@ export default function GraphVisualization({
       />
     </div>
   );
-}
+});
+
+GraphVisualization.displayName = "GraphVisualization";
+
+export default GraphVisualization;
 

@@ -58,19 +58,34 @@ class ArticuloInfo:
             "paperId": self.paper_id
         }
     
+    @staticmethod
+    def _normalize_str_list(raw: Any) -> List[str]:
+        """Convierte una lista mixta (str o dict con 'name') a List[str]."""
+        if not isinstance(raw, list):
+            return []
+        result = []
+        for item in raw:
+            if isinstance(item, str):
+                result.append(item)
+            elif isinstance(item, dict):
+                name = item.get("name") or item.get("title") or item.get("paperId") or ""
+                if name:
+                    result.append(str(name))
+        return result
+
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "ArticuloInfo":
         return cls(
             title=data.get("title", "No disponible"),
-            authors=data.get("authors", []) if isinstance(data.get("authors"), list) else [],
+            authors=cls._normalize_str_list(data.get("authors")),
             year=data.get("year"),
             venue=data.get("venue", "No disponible"),
             doi=data.get("doi"),
             abstract=data.get("abstract", "No disponible"),
-            topics=data.get("topics", []) if isinstance(data.get("topics"), list) else [],
-            citations=data.get("citations", []) if isinstance(data.get("citations"), list) else [],
+            topics=cls._normalize_str_list(data.get("topics")),
+            citations=cls._normalize_str_list(data.get("citations")),
             citation_count=data.get("citationCount", 0) or 0,
-            references=data.get("references", []) if isinstance(data.get("references"), list) else [],
+            references=cls._normalize_str_list(data.get("references")),
             url=data.get("url"),
             categoria=data.get("categoria", "articulo"),
             paper_id=data.get("paperId")
@@ -263,7 +278,22 @@ class Grafo:
         if vertice:
             return vertice.visible
         return default
-    
+
+    def get_color(self, dato: str) -> Optional[str]:
+        """Obtiene el color de un vértice (propio o por defecto según tipo)."""
+        vertice = self.busca_vertice(dato)
+        if vertice is None:
+            return None
+        return vertice.color or self._get_default_color(vertice)
+
+    def set_color(self, dato: str, color: Optional[str]) -> bool:
+        """Establece el color de un vértice."""
+        vertice = self.busca_vertice(dato)
+        if vertice is None:
+            return False
+        vertice.color = color
+        return True
+
     def set_posicion(self, dato: str, x: float, y: float) -> bool:
         """Establece la posición (x, y) de un vértice."""
         vertice = self.busca_vertice(dato)

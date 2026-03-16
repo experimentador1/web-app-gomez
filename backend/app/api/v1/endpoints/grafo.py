@@ -357,6 +357,8 @@ async def importar_grafo_pro_json(data: Dict[str, Any]):
     try:
         grafo_service.importar_grafo_pro_json(data, merge=merge, tipo=tipo)
     except Exception as e:
+        import traceback, logging
+        logging.getLogger(__name__).error("Error importar JSON:\n%s", traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Error al importar JSON: {str(e)}")
     return {
         "mensaje": f"Grafo importado correctamente (versión {tipo.upper()})",
@@ -639,6 +641,31 @@ async def set_vertice_posicion(
         raise HTTPException(status_code=400, detail="x e y deben ser números")
     grafo_service.grafo_actual.set_posicion(vertice_id, x, y)
     return {"mensaje": "Posición actualizada", "vertice_id": vertice_id, "x": x, "y": y}
+
+
+@router.post("/grafo/posiciones")
+async def set_posiciones_batch(payload: Dict[str, Any]):
+    """
+    Actualiza las posiciones (x, y) de múltiples nodos en una sola llamada.
+    Body: { "posiciones": { "<id_nodo>": { "x": number, "y": number }, ... } }
+    Se usa tras Force Atlas o al finalizar un arrastre para sincronizar todas
+    las coordenadas del canvas con el backend antes de exportar.
+    """
+    if not grafo_service.grafo_actual:
+        raise HTTPException(status_code=404, detail="No hay grafo cargado")
+    posiciones: Dict[str, Any] = payload.get("posiciones") or {}
+    if not isinstance(posiciones, dict) or not posiciones:
+        raise HTTPException(status_code=400, detail="Se esperaba { posiciones: { id: {x, y} } }")
+    actualizados = 0
+    for nid, coords in posiciones.items():
+        try:
+            x = float(coords.get("x", 0))
+            y = float(coords.get("y", 0))
+        except (TypeError, ValueError):
+            continue
+        if grafo_service.grafo_actual.set_posicion(nid, x, y):
+            actualizados += 1
+    return {"mensaje": f"{actualizados} posiciones actualizadas", "actualizados": actualizados}
 
 
 # ==================== VISIBILIDAD ====================

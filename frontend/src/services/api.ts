@@ -322,6 +322,20 @@ export async function listarVertices(
 // ==================== POSICIÓN ====================
 
 /**
+ * Actualiza las posiciones de MÚLTIPLES nodos en una sola llamada.
+ * Se usa tras Force Atlas o tras mover nodos para sincronizar con el backend.
+ */
+export async function setPosicionesBatch(
+  posiciones: Record<string, { x: number; y: number }>
+): Promise<{ mensaje: string; actualizados: number }> {
+  const { data } = await api.post<{ mensaje: string; actualizados: number }>(
+    "/grafo/posiciones",
+    { posiciones }
+  );
+  return data;
+}
+
+/**
  * Actualiza la posición (x, y) de un nodo en el backend para que Guardar Pro exporte las coordenadas correctas.
  */
 export async function setVerticePosicion(
