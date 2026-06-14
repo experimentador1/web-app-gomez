@@ -21,6 +21,7 @@ const teamMembers = [
   "Dr. Gilberto Murillo González",
   "Dr. Pablo Payro Campos",
   "Dra. Karla Paola Martínez Rámila",
+  "Dra. Karla Alejandra Zurita Cruz",
 ];
 
 const citations = [
